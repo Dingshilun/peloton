@@ -50,6 +50,8 @@ class TestingIndexUtil {
 
   static void NonUniqueKeyMultiThreadedStressTest2(IndexType index_type);
 
+  static void MyReversedIteratorTest(IndexType index_type);
+
   //===--------------------------------------------------------------------===//
   // Utility Methods
   //===--------------------------------------------------------------------===//

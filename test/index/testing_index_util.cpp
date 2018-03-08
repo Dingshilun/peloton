@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <common/internal_types.h>
 #include "index/testing_index_util.h"
 
 #include "gtest/gtest.h"
@@ -30,6 +31,86 @@ namespace test {
 std::shared_ptr<ItemPointer> TestingIndexUtil::item0(new ItemPointer(120, 5));
 std::shared_ptr<ItemPointer> TestingIndexUtil::item1(new ItemPointer(120, 7));
 std::shared_ptr<ItemPointer> TestingIndexUtil::item2(new ItemPointer(123, 19));
+
+void TestingIndexUtil::MyReversedIteratorTest(const IndexType index_type) {
+  auto pool = TestingHarness::GetInstance().GetTestingPool();
+  std::vector<ItemPointer *> location_ptrs;
+  int test_size = 5;
+  // INDEX
+  std::unique_ptr<index::Index, void (*)(index::Index *)> index(
+      TestingIndexUtil::BuildIndex(index_type, false), DestroyIndex);
+  const catalog::Schema *key_schema = index->GetKeySchema();
+
+  std::unique_ptr<storage::Tuple> key0(new storage::Tuple(key_schema, true));
+  key0->SetValue(0, type::ValueFactory::GetIntegerValue(100), pool);
+  key0->SetValue(1, type::ValueFactory::GetVarcharValue("a"), pool);
+  std::unique_ptr<storage::Tuple> key1(new storage::Tuple(key_schema, true));
+  key1->SetValue(0, type::ValueFactory::GetIntegerValue(120), pool);
+  key1->SetValue(1, type::ValueFactory::GetVarcharValue("a"), pool);
+  std::unique_ptr<storage::Tuple> key2(new storage::Tuple(key_schema, true));
+  key2->SetValue(0, type::ValueFactory::GetIntegerValue(90), pool);
+  key2->SetValue(1, type::ValueFactory::GetVarcharValue("b"), pool);
+
+  index->InsertEntry(key1.get(), TestingIndexUtil::item1.get());
+  index->InsertEntry(key2.get(), TestingIndexUtil::item2.get());
+
+  type::Value key0_val0 = (key0->GetValue(0));
+  type::Value key0_val1 = (key0->GetValue(1));
+  index->ScanTest(
+      {key0_val0, key0_val1}, {0, 1},
+      {ExpressionType::COMPARE_GREATERTHANOREQUALTO, ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+      ScanDirectionType::BACKWARD, location_ptrs);
+  EXPECT_EQ(1, location_ptrs.size());
+  location_ptrs.clear();
+  std::vector<std::shared_ptr<ItemPointer>> itemVec;
+  for (int i = 0;i<test_size;i++) {
+    std::shared_ptr<ItemPointer> item(new ItemPointer(i, i));
+    itemVec.push_back(item);
+    index->InsertEntry(key0.get(), itemVec[i].get());
+  }
+
+  // SCAN
+  index->ScanTest(
+      {key0_val0, key0_val1}, {0, 1},
+      {ExpressionType::COMPARE_GREATERTHANOREQUALTO, ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+      ScanDirectionType::BACKWARD, location_ptrs);
+  EXPECT_EQ(test_size + 1, location_ptrs.size());
+  //EXPECT_EQ(TestingIndexUtil::item0->block, location_ptrs[0]->block);
+  std::vector<ItemPointer *> location_ptrs2;
+  index->ScanTest(
+      {key0_val0, key0_val1}, {0, 1},
+      {ExpressionType::COMPARE_GREATERTHANOREQUALTO, ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+      ScanDirectionType::FORWARD, location_ptrs2);
+  for (size_t i = 0;i<location_ptrs.size();i++){
+    EXPECT_EQ(location_ptrs[i]->block, location_ptrs2[location_ptrs.size()-i-1]->block);
+  }
+  EXPECT_EQ(location_ptrs.size(),location_ptrs2.size());
+  location_ptrs.clear();
+  location_ptrs2.clear();
+  // DELETE
+  index->DeleteEntry(key0.get(), itemVec[3].get());
+  //TODO: error when delete a non-existing value
+  //index->DeleteEntry(key0.get(), itemVec[230].get());
+  //index->DeleteEntry(key0.get(), itemVec[120].get());
+  //index->DeleteEntry(key0.get(), itemVec[560].get());
+
+  index->ScanTest(
+      {key0_val0, key0_val1}, {0, 1},
+      {ExpressionType::COMPARE_GREATERTHANOREQUALTO, ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+      ScanDirectionType::BACKWARD, location_ptrs);
+  EXPECT_EQ(test_size, location_ptrs.size());
+  //EXPECT_EQ(TestingIndexUtil::item0->block, location_ptrs[0]->block);
+  index->ScanTest(
+      {key0_val0, key0_val1}, {0, 1},
+      {ExpressionType::COMPARE_GREATERTHANOREQUALTO, ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+      ScanDirectionType::FORWARD, location_ptrs2);
+  for (size_t i = 0;i<location_ptrs.size();i++){
+    EXPECT_EQ(location_ptrs[i]->block, location_ptrs2[location_ptrs.size()-i-1]->block);
+  }
+  EXPECT_EQ(location_ptrs.size(),location_ptrs2.size());
+  location_ptrs.clear();
+  location_ptrs2.clear();
+}
 
 void TestingIndexUtil::BasicTest(const IndexType index_type) {
   auto pool = TestingHarness::GetInstance().GetTestingPool();
