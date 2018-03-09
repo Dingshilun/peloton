@@ -28,9 +28,9 @@ namespace index {
 #define WORD(x) reinterpret_cast<std::uintptr_t>((x))
 #define GET_DELETE(addr) ((WORD((addr))) & 1ll)
 #define GET_FLAG(addr) ((WORD((addr))) & 2ll)
-#define GET_NEXT_PTR(node) ((node)->next_.load())
-#define CHECK_DELETE(node) (WORD(GET_NEXT_PTR(node)) & 1ll)
-#define CHECK_FLAG(node) (WORD(GET_NEXT_PTR(node)) & 2ll)
+#define GET_SUCC(node) ((node)->next_.load())
+#define CHECK_DELETE(node) (WORD(GET_SUCC(node)) & 1ll)
+#define CHECK_FLAG(node) (WORD(GET_SUCC(node)) & 2ll)
 #define SET_DELETE(addr, bit) (((WORD((addr))) & ~1ll) | (bit))
 #define SET_FLAG(addr, bit) (((WORD((addr))) & ~2ll) | ((bit) << 1))
 #define GET_NEXT(node) \
@@ -83,7 +83,7 @@ class SkipList {
     auto pair = Search(key, ctx);
     auto node = pair.second;
     while (node != nullptr && KeyCmpEqual(node->key_, key)) {
-      if (GET_DELETE(node->next_.load())) {
+      if (CHECK_DELETE(node)) {
         node = GET_NEXT(node);
         continue;
       }
@@ -250,7 +250,7 @@ class SkipList {
     for (u_int32_t i = start_level; i < expected_level; i++) {
       bool insert_flag = false;
       do {
-        if (i != 0 && GET_DELETE(tower[i]->GetRoot().load()->next_.load())) {
+        if (i != 0 && CHECK_DELETE(tower[i]->GetRoot().load())) {
           // the root has been deleted
           // there is no need to continue
           for (auto j = i; j < expected_level; j++) {
@@ -278,7 +278,7 @@ class SkipList {
                 static_cast<SkipListInnerNode *>(call_stack[i].second);
             while (cursor) {
               if (!KeyCmpEqual(key, cursor->key_)) break;
-              if (GET_DELETE(cursor->next_.load())) {
+              if (CHECK_DELETE(cursor)) {
                 cursor = static_cast<SkipListInnerNode *>(GET_NEXT(cursor));
                 continue;
               }
@@ -355,7 +355,7 @@ class SkipList {
         // try to insert the key in the lowest level
         // if failed then abort the insert
         if (call_stack[0].second == nullptr ||
-            GET_DELETE(call_stack[0].second->next_.load()) ||
+            CHECK_DELETE(call_stack[0].second) ||
             !KeyCmpEqual(call_stack[0].second->key_, key)) {
           tower[0]->next_ = call_stack[0].second;
           insert_flag = call_stack[0].first->next_.compare_exchange_strong(
@@ -485,7 +485,7 @@ class SkipList {
    * HelpFlagged() - Attempts to mark and physically delete del_node
    */
   void HelpFlagged(SkipListBaseNode *prev_node, SkipListBaseNode *del_node,
-                   UNUSED_ATTRIBUTE OperationContext &ctx) {
+                   OperationContext &ctx) {
     SkipListBaseNode *prev_assert = nullptr;
     bool flag =
         del_node->back_link_.compare_exchange_strong(prev_assert, prev_node);
@@ -500,8 +500,7 @@ class SkipList {
   /*
    * TryDelete() Attempts to mark the node del node.
    */
-  void TryDelete(SkipListBaseNode *del_node,
-                 UNUSED_ATTRIBUTE OperationContext &ctx) {
+  void TryDelete(SkipListBaseNode *del_node, OperationContext &ctx) {
     while (!CHECK_DELETE(del_node)) {
       auto cmp_ptr = GET_NEXT(del_node);
       auto set_ptr =
@@ -519,9 +518,9 @@ class SkipList {
    *
    * The return value is a tuple of deleted node and the success indicator
    */
-  std::pair<SkipListBaseNode *, bool> TryFlag(
-      SkipListBaseNode *prev_node, SkipListBaseNode *target_node,
-      UNUSED_ATTRIBUTE OperationContext &ctx) {
+  std::pair<SkipListBaseNode *, bool> TryFlag(SkipListBaseNode *prev_node,
+                                              SkipListBaseNode *target_node,
+                                              OperationContext &ctx) {
     auto flag_ptr =
         reinterpret_cast<SkipListBaseNode *> SET_FLAG(target_node, 1);
     auto cmp_ptr =
@@ -882,12 +881,12 @@ class SkipList {
    * NeedGC() - Whether the skiplsit needs garbage collection
    */
   bool NeedGC() {
-    LOG_TRACE("Need GC!");
+    LOG_INFO("Need GC!");
     return true;
   }
 
   size_t GetMemoryFootprint() {
-    LOG_TRACE("Get Memory Footprint!");
+    LOG_INFO("Get Memory Footprint!");
     return 0;
   }
 
