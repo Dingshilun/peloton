@@ -180,6 +180,8 @@ void SKIPLIST_INDEX_TYPE::ScanKey(const storage::Tuple *key,
   KeyType index_key;
   index_key.SetFromKey(key);
 
+  LOG_INFO("ScanKey() key: %s", index_key.GetInfo().c_str());
+
   container.GetValue(index_key, result);
 }
 
