@@ -404,6 +404,7 @@ class SkipList {
    */
   bool DeleteNode(const KeyType &key, const ValueType &value, NodePair &pair,
                   OperationContext &ctx) {
+    LOG_INFO("DeleteNode()");
     SkipListBaseNode *prev_node = pair.first;
     SkipListBaseNode *del_node = pair.second;
     bool result = false;
@@ -438,6 +439,7 @@ class SkipList {
    */
   bool Delete(const KeyType &key, const ValueType &value,
               OperationContext &ctx) {
+    LOG_INFO("Delete()");
     NodePair pair = Search(key, ctx);
     SkipListBaseNode *prev_node = pair.first;
     SkipListBaseNode *del_node = pair.second;
@@ -448,7 +450,7 @@ class SkipList {
       pair = SearchFrom(key, prev_node, ctx);
       prev_node = pair.first;
       del_node = pair.second;
-      if (!CHECK_FLAG(del_node) && !CHECK_DELETE(del_node)) {
+      if (del_node && !CHECK_FLAG(del_node) && !CHECK_DELETE(del_node)) {
         if (!KeyCmpEqual(key, del_node->key_)) {
           // No such pair
           return false;
