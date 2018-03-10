@@ -59,7 +59,7 @@ class SkipList {
   using InnerNodePair = std::pair<SkipListInnerNode *, SkipListInnerNode *>;
   using InnerNodeList = std::vector<SkipListInnerNode *>;
 
-  using KeyValuePair = std::pair<KeyType, ValueType>;
+  using KeyValuePair = std::pair<KeyType *, ValueType *>;
 
  private:
   ///////////////////////////////////////////////////////////////////
@@ -635,10 +635,26 @@ class SkipList {
     this->skip_list_head_ = node_manager_.GetSkipListHead(0);
   }
 
+  /*
+   * when calling this, need to make sure that no other threads exist
+   */
   ~SkipList() {
     // TODO: deconstruct all nodes in the skip list
     LOG_INFO("SkipList deconstructed!");
-
+    auto head = this->skip_list_head_.load();
+    std::vector<SkipListBaseNode *> tmp_vec;
+    while (head) {
+      auto cursor = head;
+      while (cursor) {
+        tmp_vec.push_back(cursor);
+        cursor = GET_NEXT(cursor);
+      }
+      head = head->down_.load();
+      for (auto tmp : tmp_vec) {
+        node_manager_.ReturnSkipListNode(tmp);
+      }
+      tmp_vec.clear();
+    }
     return;
   }
   /*
@@ -763,7 +779,7 @@ class SkipList {
         node_ = nullptr;
       }
 
-      kv_p = std::make_pair(node_->key_, node_->GetValue());
+      kv_p = std::make_pair(&(node_->key_), &(node_->GetValue()));
 
       list_->epoch_manager_.LeaveEpoch(epoch_node_p);
     }
@@ -780,7 +796,7 @@ class SkipList {
       if (root_pair.second != nullptr) {
         node_ =
             reinterpret_cast<SkipListInnerNode *>(GET_NEXT(root_pair.first));
-        kv_p = std::make_pair(node_->key_, node_->GetValue());
+        kv_p = std::make_pair(&(node_->key_), &(node_->GetValue()));
       } else {
         node_ = nullptr;
       }
@@ -809,8 +825,8 @@ class SkipList {
         if (CHECK_DELETE(node_)) {
           node_ = reinterpret_cast<SkipListInnerNode *>(GET_NEXT(node_));
         }
-        kv_p.first = node_->key_;
-        kv_p.second = node_->GetValue();
+        kv_p.first = &(node_->key_);
+        kv_p.second = &(node_->GetValue());
       }
 
       list_->epoch_manager_.LeaveEpoch(epoch_node_p);
@@ -836,8 +852,8 @@ class SkipList {
         if (CHECK_DELETE(node_)) {
           node_ = reinterpret_cast<SkipListInnerNode *>(GET_NEXT(node_));
         }
-        kv_p.first = node_->key_;
-        kv_p.second = node_->GetValue();
+        kv_p.first = &(node_->key_);
+        kv_p.second = &(node_->GetValue());
       }
 
       list_->epoch_manager_.LeaveEpoch(epoch_node_p);
@@ -885,8 +901,8 @@ class SkipList {
       }
       this->node_ = cursor;
       if (!IsEnd()) {
-        kv_.first = this->node_->key_;
-        kv_.second = this->node_->GetValue();
+        kv_.first = &(this->node_->key_);
+        kv_.second = &(this->node_->GetValue());
       }
     }
 
@@ -912,8 +928,8 @@ class SkipList {
         next = GET_NEXT(next);
       }
       if (!IsEnd()) {
-        kv_.first = this->node_->key_;
-        kv_.second = this->node_->GetValue();
+        kv_.first = &(this->node_->key_);
+        kv_.second = &(this->node_->GetValue());
       }
     }
 
@@ -938,8 +954,8 @@ class SkipList {
         this->node_ = this->list_->SearchPrevNode(node_, this->ctx_);
       } while (CHECK_DELETE(this->node_) && !IsEnd());
       if (!IsEnd()) {
-        kv_.first = this->node_->key_;
-        kv_.second = this->node_->GetValue();
+        kv_.first = &(this->node_->key_);
+        kv_.second = &(this->node_->GetValue());
       }
       return *this;
     }
@@ -954,8 +970,8 @@ class SkipList {
         this->node_ = this->list_->SearchPrevNode(node_, this->ctx_);
       } while (CHECK_DELETE(this->node_) && !IsEnd());
       if (!IsEnd()) {
-        kv_.first = this->node_->key_;
-        kv_.second = this->node_->GetValue();
+        kv_.first = &(this->node_->key_);
+        kv_.second = &(this->node_->GetValue());
       }
       return temp;
     }
@@ -1070,7 +1086,7 @@ class SkipList {
 
   size_t GetMemoryFootprint() {
     LOG_INFO("Get Memory Footprint!");
-    return 0;
+    return node_manager_.GetFootprint();
   }
 
  public:
@@ -1194,11 +1210,21 @@ class SkipList {
    *
    */
   class NodeManager {
+   private:
+    std::atomic<size_t> inner_node_count_;
+    std::atomic<size_t> head_node_count_;
+
    public:
+    NodeManager() : inner_node_count_(0), head_node_count_(0) {}
+    size_t GetFootprint() {
+      return sizeof(SkipListBaseNode) * head_node_count_.load() +
+             sizeof(SkipListInnerNode) * inner_node_count_.load();
+    }
     /*
      *
      */
     SkipListBaseNode *GetSkipListHead(u_int32_t level) {
+      head_node_count_.fetch_add(1);
       return new SkipListBaseNode(true, level);
     }
     /*
@@ -1223,6 +1249,7 @@ class SkipList {
      */
     SkipListInnerNode *GetSkipListInnerNode(KeyType key, ValueType value,
                                             u_int32_t level) {
+      inner_node_count_.fetch_add(1);
       auto tmp =
           new SkipListInnerNode(nullptr, nullptr, nullptr, key, false, level);
       tmp->SetValue(value);
@@ -1236,12 +1263,19 @@ class SkipList {
                                             SkipListInnerNode *root,
                                             SkipListInnerNode *down,
                                             u_int32_t level) {
+      inner_node_count_.fetch_add(1);
       auto tmp =
           new SkipListInnerNode(nullptr, down, nullptr, key, false, level);
       tmp->SetRoot(root);
       return tmp;
     }
-    void ReturnSkipListNode(SkipListBaseNode *node) { delete node; }
+    void ReturnSkipListNode(SkipListBaseNode *node) {
+      if (node->isHead_)
+        head_node_count_.fetch_sub(1);
+      else
+        inner_node_count_.fetch_sub(1);
+      delete node;
+    }
   };
 
   /*
