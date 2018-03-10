@@ -150,7 +150,7 @@ void SKIPLIST_INDEX_TYPE::Scan(
  */
 SKIPLIST_TEMPLATE_ARGUMENTS
 void SKIPLIST_INDEX_TYPE::ScanLimit(
-    const std::vector<type::Value> &value_list,
+    UNUSED_ATTRIBUTE const std::vector<type::Value> &value_list,
     UNUSED_ATTRIBUTE const std::vector<oid_t> &tuple_column_id_list,
     UNUSED_ATTRIBUTE const std::vector<ExpressionType> &expr_list,
     ScanDirectionType scan_direction, std::vector<ValueType> &result,
@@ -163,19 +163,21 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
       "ScanLimit() Point Query = %d; Full Scan = %d; limit = %lu; offset = %lu",
       csp_p->IsPointQuery(), csp_p->IsFullIndexScan(), limit, offset);
 
+  uint64_t count = 0;
   if (csp_p->IsPointQuery()) {
-    return Scan(value_list, tuple_column_id_list, expr_list, scan_direction,
-                result, csp_p);
+    const storage::Tuple *point_query_key_p = csp_p->GetPointQueryKey();
+
+    KeyType point_query_key;
+    point_query_key.SetFromKey(point_query_key_p);
+
+    container.GetValueLimit(point_query_key, result, limit, offset);
   } else if (csp_p->IsFullIndexScan()) {
-    uint64_t count = 0;
     auto scan_itr = container.ForwardBegin();
-    for (; !scan_itr.IsEnd() && count < offset; scan_itr++) {
+    for (; !scan_itr.IsEnd() && count < offset + limit; scan_itr++) {
+      if (count >= offset) {
+        result.push_back(scan_itr->second);
+      }
       count++;
-    }
-    count = 0;
-    for (; !scan_itr.IsEnd() && count < limit; scan_itr++) {
-      count++;
-      result.push_back(scan_itr->second);
     }
   } else {
     const storage::Tuple *low_key_p = csp_p->GetLowKey();
@@ -189,11 +191,14 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
     index_low_key.SetFromKey(low_key_p);
     index_high_key.SetFromKey(high_key_p);
 
-    for (auto scan_itr = container.ForwardBegin(index_low_key);
-         (scan_itr.IsEnd() == false) &&
-             (container.KeyCmpLessEqual(scan_itr->first, index_high_key));
+    auto scan_itr = container.ForwardBegin(index_low_key);
+    for (; !scan_itr.IsEnd() && count < offset + limit &&
+               container.KeyCmpLessEqual(scan_itr->first, index_high_key);
          scan_itr++) {
-      result.push_back(scan_itr->second);
+      if (count >= offset) {
+        result.push_back(scan_itr->second);
+      }
+      count++;
     }
   }
 }
