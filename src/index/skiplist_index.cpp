@@ -108,8 +108,8 @@ void SKIPLIST_INDEX_TYPE::Scan(
     throw Exception("Invalid scan direction \n");
   }
 
-  LOG_INFO("Scan() Point Query = %d; Full Scan = %d; Direction = %d",
-           csp_p->IsPointQuery(), csp_p->IsFullIndexScan(), scan_direction);
+  LOG_INFO("Scan() Point Query = %d; Full Scan = %d", csp_p->IsPointQuery(),
+           csp_p->IsFullIndexScan());
 
   if (csp_p->IsPointQuery()) {
     const storage::Tuple *point_query_key_p = csp_p->GetPointQueryKey();
@@ -155,8 +155,7 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
     UNUSED_ATTRIBUTE const std::vector<ExpressionType> &expr_list,
     ScanDirectionType scan_direction, std::vector<ValueType> &result,
     const ConjunctionScanPredicate *csp_p, uint64_t limit, uint64_t offset) {
-  // This is a hack - we do not support backward scan
-  if (scan_direction == ScanDirectionType::BACKWARD) {
+  if (scan_direction == ScanDirectionType::INVALID) {
     throw Exception("Invalid scan direction \n");
   }
 
@@ -197,8 +196,6 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
       result.push_back(scan_itr->second);
     }
   }
-
-  return;
 }
 
 SKIPLIST_TEMPLATE_ARGUMENTS
