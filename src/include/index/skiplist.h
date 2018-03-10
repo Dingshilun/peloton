@@ -36,7 +36,7 @@ namespace index {
 #define GET_NEXT(node) \
   reinterpret_cast<SkipListBaseNode *>(WORD((node)->next_.load()) & ~3ll)
 
-#define SKIP_LIST_INITIAL_MAX_LEVEL_ 10
+#define SKIP_LIST_INITIAL_MAX_LEVEL_ 20
 
 /*
  * SKIPLIST_TEMPLATE_ARGUMENTS - Save some key strokes
@@ -905,7 +905,7 @@ class SkipList {
       auto next = pair.second;
       node_ = reinterpret_cast<SkipListInnerNode *>(pair.first);
       while (next) {
-        if (!this->list_->KeyCmpEqual(next->key_, node_->key_)) {
+        if (this->list_->KeyCmpGreater(next->key_, key)) {
           break;
         }
         node_ = reinterpret_cast<SkipListInnerNode *>(next);
