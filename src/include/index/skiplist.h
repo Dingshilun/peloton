@@ -905,7 +905,7 @@ class SkipList {
       auto next = pair.second;
       node_ = reinterpret_cast<SkipListInnerNode *>(pair.first);
       while (next) {
-        if (!this->list_->KeyCmpEqual(next->key_, node_->key_)) {
+        if (this->list_->KeyCmpGreater(next->key_, key)) {
           break;
         }
         node_ = reinterpret_cast<SkipListInnerNode *>(next);
