@@ -35,7 +35,7 @@ std::shared_ptr<ItemPointer> TestingIndexUtil::item2(new ItemPointer(123, 19));
 void TestingIndexUtil::MyReversedIteratorTest(const IndexType index_type) {
   auto pool = TestingHarness::GetInstance().GetTestingPool();
   std::vector<ItemPointer *> location_ptrs;
-  int test_size = 5;
+  int test_size = 1000;
   // INDEX
   std::unique_ptr<index::Index, void (*)(index::Index *)> index(
       TestingIndexUtil::BuildIndex(index_type, false), DestroyIndex);
@@ -91,15 +91,16 @@ void TestingIndexUtil::MyReversedIteratorTest(const IndexType index_type) {
   // DELETE
   index->DeleteEntry(key0.get(), itemVec[3].get());
   // TODO: error when delete a non-existing value
-  // index->DeleteEntry(key0.get(), itemVec[230].get());
-  // index->DeleteEntry(key0.get(), itemVec[120].get());
-  // index->DeleteEntry(key0.get(), itemVec[560].get());
+  index->DeleteEntry(key0.get(), itemVec[230].get());
+  index->DeleteEntry(key0.get(), itemVec[120].get());
+  index->DeleteEntry(key0.get(), TestingIndexUtil::item0.get());
 
   index->ScanTest({key0_val0, key0_val1}, {0, 1},
                   {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
                    ExpressionType::COMPARE_GREATERTHANOREQUALTO},
                   ScanDirectionType::BACKWARD, location_ptrs);
-  EXPECT_EQ(test_size, location_ptrs.size());
+  // should be test_size + 1 - 3, where we eleminated four entries
+  EXPECT_EQ(test_size - 2, location_ptrs.size());
   // EXPECT_EQ(TestingIndexUtil::item0->block, location_ptrs[0]->block);
   index->ScanTest({key0_val0, key0_val1}, {0, 1},
                   {ExpressionType::COMPARE_GREATERTHANOREQUALTO,

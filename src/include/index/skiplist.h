@@ -125,7 +125,6 @@ class SkipList {
    */
   SkipListInnerNode *SearchPrevNode(SkipListInnerNode *target_node,
                                     OperationContext &ctx) {
-    LOG_INFO("Searching for previous node of %p", target_node);
     SkipListInnerNode *cursor = nullptr;
     KeyType target_key = target_node->key_;
     auto pair = Search(target_key, ctx);
@@ -154,7 +153,6 @@ class SkipList {
       }
       pair = Search(target_key, ctx);
     }
-    LOG_INFO("GET %p as prev node of %p", pair.first, target_node);
     return reinterpret_cast<SkipListInnerNode *>(pair.first);
   }
   /*
