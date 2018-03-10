@@ -36,7 +36,7 @@ namespace index {
 #define GET_NEXT(node) \
   reinterpret_cast<SkipListBaseNode *>(WORD((node)->next_.load()) & ~3ll)
 
-#define SKIP_LIST_INITIAL_MAX_LEVEL_ 10
+#define SKIP_LIST_INITIAL_MAX_LEVEL_ 20
 
 /*
  * SKIPLIST_TEMPLATE_ARGUMENTS - Save some key strokes
