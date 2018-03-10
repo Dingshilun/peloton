@@ -56,58 +56,60 @@ void TestingIndexUtil::MyReversedIteratorTest(const IndexType index_type) {
 
   type::Value key0_val0 = (key0->GetValue(0));
   type::Value key0_val1 = (key0->GetValue(1));
-  index->ScanTest(
-      {key0_val0, key0_val1}, {0, 1},
-      {ExpressionType::COMPARE_GREATERTHANOREQUALTO, ExpressionType::COMPARE_GREATERTHANOREQUALTO},
-      ScanDirectionType::BACKWARD, location_ptrs);
+  index->ScanTest({key0_val0, key0_val1}, {0, 1},
+                  {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                   ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+                  ScanDirectionType::BACKWARD, location_ptrs);
   EXPECT_EQ(1, location_ptrs.size());
   location_ptrs.clear();
   std::vector<std::shared_ptr<ItemPointer>> itemVec;
-  for (int i = 0;i<test_size;i++) {
+  for (int i = 0; i < test_size; i++) {
     std::shared_ptr<ItemPointer> item(new ItemPointer(i, i));
     itemVec.push_back(item);
     index->InsertEntry(key0.get(), itemVec[i].get());
   }
 
   // SCAN
-  index->ScanTest(
-      {key0_val0, key0_val1}, {0, 1},
-      {ExpressionType::COMPARE_GREATERTHANOREQUALTO, ExpressionType::COMPARE_GREATERTHANOREQUALTO},
-      ScanDirectionType::BACKWARD, location_ptrs);
+  index->ScanTest({key0_val0, key0_val1}, {0, 1},
+                  {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                   ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+                  ScanDirectionType::BACKWARD, location_ptrs);
   EXPECT_EQ(test_size + 1, location_ptrs.size());
-  //EXPECT_EQ(TestingIndexUtil::item0->block, location_ptrs[0]->block);
+  // EXPECT_EQ(TestingIndexUtil::item0->block, location_ptrs[0]->block);
   std::vector<ItemPointer *> location_ptrs2;
-  index->ScanTest(
-      {key0_val0, key0_val1}, {0, 1},
-      {ExpressionType::COMPARE_GREATERTHANOREQUALTO, ExpressionType::COMPARE_GREATERTHANOREQUALTO},
-      ScanDirectionType::FORWARD, location_ptrs2);
-  for (size_t i = 0;i<location_ptrs.size();i++){
-    EXPECT_EQ(location_ptrs[i]->block, location_ptrs2[location_ptrs.size()-i-1]->block);
+  index->ScanTest({key0_val0, key0_val1}, {0, 1},
+                  {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                   ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+                  ScanDirectionType::FORWARD, location_ptrs2);
+  for (size_t i = 0; i < location_ptrs.size(); i++) {
+    EXPECT_EQ(location_ptrs[i]->block,
+              location_ptrs2[location_ptrs.size() - i - 1]->block);
   }
-  EXPECT_EQ(location_ptrs.size(),location_ptrs2.size());
+  EXPECT_EQ(location_ptrs.size(), location_ptrs2.size());
   location_ptrs.clear();
   location_ptrs2.clear();
   // DELETE
   index->DeleteEntry(key0.get(), itemVec[3].get());
-  //TODO: error when delete a non-existing value
-  //index->DeleteEntry(key0.get(), itemVec[230].get());
-  //index->DeleteEntry(key0.get(), itemVec[120].get());
-  //index->DeleteEntry(key0.get(), itemVec[560].get());
+  // TODO: error when delete a non-existing value
+  // index->DeleteEntry(key0.get(), itemVec[230].get());
+  // index->DeleteEntry(key0.get(), itemVec[120].get());
+  // index->DeleteEntry(key0.get(), itemVec[560].get());
 
-  index->ScanTest(
-      {key0_val0, key0_val1}, {0, 1},
-      {ExpressionType::COMPARE_GREATERTHANOREQUALTO, ExpressionType::COMPARE_GREATERTHANOREQUALTO},
-      ScanDirectionType::BACKWARD, location_ptrs);
+  index->ScanTest({key0_val0, key0_val1}, {0, 1},
+                  {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                   ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+                  ScanDirectionType::BACKWARD, location_ptrs);
   EXPECT_EQ(test_size, location_ptrs.size());
-  //EXPECT_EQ(TestingIndexUtil::item0->block, location_ptrs[0]->block);
-  index->ScanTest(
-      {key0_val0, key0_val1}, {0, 1},
-      {ExpressionType::COMPARE_GREATERTHANOREQUALTO, ExpressionType::COMPARE_GREATERTHANOREQUALTO},
-      ScanDirectionType::FORWARD, location_ptrs2);
-  for (size_t i = 0;i<location_ptrs.size();i++){
-    EXPECT_EQ(location_ptrs[i]->block, location_ptrs2[location_ptrs.size()-i-1]->block);
+  // EXPECT_EQ(TestingIndexUtil::item0->block, location_ptrs[0]->block);
+  index->ScanTest({key0_val0, key0_val1}, {0, 1},
+                  {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                   ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+                  ScanDirectionType::FORWARD, location_ptrs2);
+  for (size_t i = 0; i < location_ptrs.size(); i++) {
+    EXPECT_EQ(location_ptrs[i]->block,
+              location_ptrs2[location_ptrs.size() - i - 1]->block);
   }
-  EXPECT_EQ(location_ptrs.size(),location_ptrs2.size());
+  EXPECT_EQ(location_ptrs.size(), location_ptrs2.size());
   location_ptrs.clear();
   location_ptrs2.clear();
 }
@@ -208,7 +210,7 @@ void TestingIndexUtil::UniqueKeyDeleteTest(const IndexType index_type) {
   std::vector<ItemPointer *> location_ptrs;
 
   // INDEX
-  std::unique_ptr<index::Index, void(*)(index::Index *)> index(
+  std::unique_ptr<index::Index, void (*)(index::Index *)> index(
       TestingIndexUtil::BuildIndex(index_type, true), DestroyIndex);
 
   const catalog::Schema *key_schema = index->GetKeySchema();
@@ -218,12 +220,12 @@ void TestingIndexUtil::UniqueKeyDeleteTest(const IndexType index_type) {
   LaunchParallelTest(1, TestingIndexUtil::InsertHelper, index.get(), pool,
                      scale_factor);
   LOG_DEBUG("INDEX VALUE CONTENTS BEFORE DELETE:\n%s",
-           index::IndexUtil::Debug(index.get()).c_str());
+            index::IndexUtil::Debug(index.get()).c_str());
 
   LaunchParallelTest(1, TestingIndexUtil::DeleteHelper, index.get(), pool,
                      scale_factor);
   LOG_DEBUG("INDEX VALUE CONTENTS AFTER DELETE:\n%s",
-           index::IndexUtil::Debug(index.get()).c_str());
+            index::IndexUtil::Debug(index.get()).c_str());
 
   // Checks
   std::unique_ptr<storage::Tuple> key0(new storage::Tuple(key_schema, true));
@@ -238,7 +240,7 @@ void TestingIndexUtil::UniqueKeyDeleteTest(const IndexType index_type) {
   key2->SetValue(1, type::ValueFactory::GetVarcharValue("c"), pool);
 
   LOG_DEBUG("INDEX CONTENTS:\n%s",
-           index::IndexUtil::Debug(index.get()).c_str());
+            index::IndexUtil::Debug(index.get()).c_str());
 
   LOG_DEBUG("ScanKey(key0=%s)", key0->GetInfo().c_str());
   index->ScanKey(key0.get(), location_ptrs);
