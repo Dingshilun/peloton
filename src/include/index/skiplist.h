@@ -1086,7 +1086,7 @@ class SkipList {
 
   size_t GetMemoryFootprint() {
     LOG_INFO("Get Memory Footprint!");
-    return 0;
+    return node_manager_.GetFootprint();
   }
 
  public:
@@ -1210,11 +1210,21 @@ class SkipList {
    *
    */
   class NodeManager {
+   private:
+    std::atomic<size_t> inner_node_count_;
+    std::atomic<size_t> head_node_count_;
+
    public:
+    NodeManager() : inner_node_count_(0), head_node_count_(0) {}
+    size_t GetFootprint() {
+      return sizeof(SkipListBaseNode) * head_node_count_.load() +
+             sizeof(SkipListInnerNode) * inner_node_count_.load();
+    }
     /*
      *
      */
     SkipListBaseNode *GetSkipListHead(u_int32_t level) {
+      head_node_count_.fetch_add(1);
       return new SkipListBaseNode(true, level);
     }
     /*
@@ -1239,6 +1249,7 @@ class SkipList {
      */
     SkipListInnerNode *GetSkipListInnerNode(KeyType key, ValueType value,
                                             u_int32_t level) {
+      inner_node_count_.fetch_add(1);
       auto tmp =
           new SkipListInnerNode(nullptr, nullptr, nullptr, key, false, level);
       tmp->SetValue(value);
@@ -1252,12 +1263,19 @@ class SkipList {
                                             SkipListInnerNode *root,
                                             SkipListInnerNode *down,
                                             u_int32_t level) {
+      inner_node_count_.fetch_add(1);
       auto tmp =
           new SkipListInnerNode(nullptr, down, nullptr, key, false, level);
       tmp->SetRoot(root);
       return tmp;
     }
-    void ReturnSkipListNode(SkipListBaseNode *node) { delete node; }
+    void ReturnSkipListNode(SkipListBaseNode *node) {
+      if (node->isHead_)
+        head_node_count_.fetch_sub(1);
+      else
+        inner_node_count_.fetch_sub(1);
+      delete node;
+    }
   };
 
   /*
