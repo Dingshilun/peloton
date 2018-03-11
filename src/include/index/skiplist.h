@@ -540,6 +540,7 @@ class SkipList {
     auto res = prev_node->next_.compare_exchange_strong(cmp_ptr, set_ptr);
     // TODO: Notify EpochManager for GC
     if(res) this->epoch_manager_.AddGarbageNode(ctx.epoch_node_, del_node);
+    else LOG_INFO("CAS failed in HelpDeleted!!!!!!!");
   }
 
   /*
@@ -1173,43 +1174,40 @@ class SkipList {
     return value_eq_obj_(v1, v2);
   }
 
+  /**
+    * class GarbageNode - A linked list of garbage nodes
+    */
+  class GarbageNode {
+  public:
+    SkipListBaseNode *node_p;
+    // Only insert at head of garbage list, no need to be atomic
+    GarbageNode *next_p;
+  };
+
+
+  /*
+   * class EpochNode - A linked list of epoch node that records thread count
+   * and start garbage node
+   */
+  class EpochNode {
+  public:
+    // Track number of active threads to determine GC or not
+    std::atomic<int> active_txn_count;
+
+    // Head of garbage node list, GC nodes are CASed onto this pointer
+    std::atomic<GarbageNode *> garbage_list_p;
+
+    EpochNode *next_p;
+  };
   // maintains Epoch
   // has a inside linked list in which every node represents an epoch
   class EpochManager {
    public:
-    /**
-      * class GarbageNode - A linked list of garbage nodes
-      */
-    class GarbageNode {
-    public:
-      SkipListBaseNode *node_p;
-      // Only insert at head of garbage list, no need to be atomic
-      GarbageNode *next_p;
-
-      ~GarbageNode(){
-        delete node_p;
-      }
-    };
-
-    /**
-      * class EpochNode - A linked list of epoch node that records thread count
-      * and start garbage node
-      */
-    struct EpochNode {
-      // Track number of active threads to determine GC or not
-      std::atomic<int> active_txn_count;
-
-      // Head of garbage node list, GC nodes are CASed onto this pointer
-      std::atomic<GarbageNode *> garbage_list_p;
-
-      EpochNode *next_p;
-    };
-
     // Indicates whether destructor is running
     std::atomic<bool> destruct_flag;
 
     // Counter indicates whether gc is needed
-    std::atomic<int> garbage_node_counter;
+    //std::atomic<int> garbage_node_counter;
 
     // Threshold for gc
     const static int gc_threshold = 2000;
@@ -1240,7 +1238,7 @@ class SkipList {
 
       head_epoch_p = current_epoch_p;
 
-      garbage_node_counter = 0;
+      //garbage_node_counter = 0;
       destruct_flag.store(false);
       need_gc = false;
 
@@ -1295,8 +1293,9 @@ class SkipList {
           garbage_node_p->next_p = epoch_p->garbage_list_p.load();
         }
       } // while 1
-      garbage_node_counter.fetch_add(1);
-      int cur_counter = garbage_node_counter.load();
+      //garbage_node_counter.fetch_add(1);
+      //int cur_counter = garbage_node_counter.load();
+      int cur_counter = node_manager_epoch_->GetGarbageNodeCount();
       if(cur_counter > gc_threshold){
         need_gc = true;
       }
@@ -1308,7 +1307,7 @@ class SkipList {
      * need to add the reference count of current EpochNode
      */
 
-    inline EpochNode *JoinEpoch() {
+    EpochNode *JoinEpoch() {
     try_join_again:
       EpochNode *epoch_p = current_epoch_p;
       int64_t prev_count = epoch_p->active_txn_count.fetch_add(1);
@@ -1396,7 +1395,7 @@ class SkipList {
           //LOG_INFO("Delete garbage node, key:%s", garbage_node_p->node_p->key_.GetInfo().c_str());
           node_manager_epoch_->ReturnSkipListNode(garbage_node_p->node_p);
           node_manager_epoch_->ReturnGarbageNode(garbage_node_p);
-          garbage_node_counter.fetch_sub(1);
+          //garbage_node_counter.fetch_sub(1);
         } // for
 
         EpochNode *next_epoch_node_p = head_epoch_p->next_p;
@@ -1457,8 +1456,11 @@ class SkipList {
     size_t GetFootprint() {
       return sizeof(SkipListBaseNode) * head_node_count_.load() +
              sizeof(SkipListInnerNode) * inner_node_count_.load() +
-             sizeof(EpochManager::EpochNode) * epoch_node_count_.load() +
-             sizeof(EpochManager::GarbageNode) * garbage_node_count_.load();
+             sizeof(EpochNode) * epoch_node_count_.load() +
+             sizeof(GarbageNode) * garbage_node_count_.load();
+    }
+    size_t GetGarbageNodeCount() {
+      return garbage_node_count_.load();
     }
     /*
      *
@@ -1512,17 +1514,17 @@ class SkipList {
     /*
      * GetEpochNode() - get an EpochNode
      */
-    EpochManager::EpochNode *GetEpochNode(){
+    EpochNode *GetEpochNode(){
       epoch_node_count_.fetch_add(1);
-      auto tmp = new EpochManager::EpochNode();
+      auto tmp = new EpochNode();
       return tmp;
     }
     /*
      * GetGarbageNode() - get a garbage node
      */
-    EpochManager::GarbageNode *GetGarbageNode(){
+    GarbageNode *GetGarbageNode(){
       garbage_node_count_.fetch_add(1);
-      auto tmp = new EpochManager::GarbageNode();
+      auto tmp = new GarbageNode();
       return tmp;
     }
     void ReturnSkipListNode(SkipListBaseNode *node) {
@@ -1532,11 +1534,11 @@ class SkipList {
         inner_node_count_.fetch_sub(1);
       delete node;
     }
-    void ReturnEpochNode(EpochManager::EpochNode *node) {
+    void ReturnEpochNode(EpochNode *node) {
       epoch_node_count_.fetch_sub(1);
       delete node;
     }
-    void ReturnGarbageNode(EpochManager::GarbageNode *node) {
+    void ReturnGarbageNode(GarbageNode *node) {
       garbage_node_count_.fetch_sub(1);
       delete node;
     }
@@ -1549,8 +1551,8 @@ class SkipList {
    */
   class OperationContext {
    public:
-    typename EpochManager::EpochNode *epoch_node_;
-    OperationContext(typename EpochManager::EpochNode *epoch_node)
+    EpochNode *epoch_node_;
+    OperationContext(EpochNode *epoch_node)
         : epoch_node_(epoch_node) {}
   };
 };
