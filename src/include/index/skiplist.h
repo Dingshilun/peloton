@@ -611,7 +611,7 @@ class SkipList {
   SkipList(KeyComparator key_cmp_obj = KeyComparator{},
            KeyEqualityChecker key_eq_obj = KeyEqualityChecker{},
            ValueEqualityChecker val_eq_obj = ValueEqualityChecker{})
-      : epoch_manager_(50),
+      : epoch_manager_(50, &node_manager_),
         key_cmp_obj_{key_cmp_obj},
         key_eq_obj_{key_eq_obj},
         value_eq_obj_{val_eq_obj} {
@@ -626,7 +626,7 @@ class SkipList {
            KeyEqualityChecker key_eq_obj = KeyEqualityChecker{},
            ValueEqualityChecker val_eq_obj = ValueEqualityChecker{})
       : // Construct Epoch Manager
-        epoch_manager_(GC_Interval),
+        epoch_manager_(GC_Interval, &node_manager_),
         duplicate_support_(duplicate),
         GC_Interval_(GC_Interval),
 
@@ -1173,25 +1173,24 @@ class SkipList {
     return value_eq_obj_(v1, v2);
   }
 
-  /**
-   * class GarbageNode - A linked list of garbage nodes
-   */
-  class GarbageNode {
-  public:
-    SkipListBaseNode *node_p;
-    // Only insert at head of garbage list, no need to be atomic
-    GarbageNode *next_p;
-
-    ~GarbageNode(){
-      delete node_p;
-    }
-  };
-
-
   // maintains Epoch
   // has a inside linked list in which every node represents an epoch
   class EpochManager {
    public:
+    /**
+      * class GarbageNode - A linked list of garbage nodes
+      */
+    class GarbageNode {
+    public:
+      SkipListBaseNode *node_p;
+      // Only insert at head of garbage list, no need to be atomic
+      GarbageNode *next_p;
+
+      ~GarbageNode(){
+        delete node_p;
+      }
+    };
+
     /**
       * class EpochNode - A linked list of epoch node that records thread count
       * and start garbage node
@@ -1205,6 +1204,7 @@ class SkipList {
 
       EpochNode *next_p;
     };
+
     // Indicates whether destructor is running
     std::atomic<bool> destruct_flag;
 
@@ -1223,14 +1223,17 @@ class SkipList {
     // Pointer to thread created by EpochManager internally
     std::thread *epoch_thread_p;
 
-    // GC Interval equals to Epoch Interval
-    int GC_Interval_;
-
     // Need GC boolean
     bool need_gc;
 
-    EpochManager(int GC_interval) {
-      current_epoch_p = new EpochNode{};
+    // GC Interval equals to Epoch Interval
+    int GC_Interval_;
+
+    NodeManager *node_manager_epoch_;
+
+    EpochManager(int GC_interval, NodeManager *node_manager_) :
+        GC_Interval_(GC_interval), node_manager_epoch_(node_manager_){
+      current_epoch_p = node_manager_epoch_->GetEpochNode();
 
       current_epoch_p->active_txn_count = 0;
       current_epoch_p->garbage_list_p = nullptr;
@@ -1277,7 +1280,7 @@ class SkipList {
     }
 
     void AddGarbageNode(EpochNode *epoch_p, SkipListBaseNode *node) {
-      GarbageNode *garbage_node_p = new GarbageNode;
+      GarbageNode *garbage_node_p = node_manager_epoch_->GetGarbageNode();
       garbage_node_p->node_p = node;
       garbage_node_p->next_p = epoch_p->garbage_list_p.load();
 
@@ -1333,7 +1336,7 @@ class SkipList {
      * Need to atomically maintain the epoch list
      */
     void NewEpoch(){
-      EpochNode *epoch_node_p = new EpochNode();
+      EpochNode *epoch_node_p = node_manager_epoch_->GetEpochNode();
 
       epoch_node_p->active_txn_count = 0;
       epoch_node_p->garbage_list_p = nullptr;
@@ -1361,7 +1364,7 @@ class SkipList {
 
       while (1) {
         if (head_epoch_p == current_epoch_p) {
-    LOG_TRACE("Current epoch is head epoch. Do not clean");
+          LOG_TRACE("Current epoch is head epoch. Do not clean");
           break;
         }
 
@@ -1385,18 +1388,19 @@ class SkipList {
 
         GarbageNode *next_garbage_node_p = nullptr;
 
-        for (const GarbageNode *garbage_node_p =
+        for (GarbageNode *garbage_node_p =
                   head_epoch_p->garbage_list_p.load();
               garbage_node_p != nullptr; garbage_node_p = next_garbage_node_p) {
           next_garbage_node_p = garbage_node_p->next_p;
 
           //LOG_INFO("Delete garbage node, key:%s", garbage_node_p->node_p->key_.GetInfo().c_str());
-          
+          node_manager_epoch_->ReturnSkipListNode(garbage_node_p->node_p);
+          node_manager_epoch_->ReturnGarbageNode(garbage_node_p);
           garbage_node_counter.fetch_sub(1);
         } // for
 
         EpochNode *next_epoch_node_p = head_epoch_p->next_p;
-        delete head_epoch_p;
+        node_manager_epoch_->ReturnEpochNode(head_epoch_p);
 
         head_epoch_p = next_epoch_node_p;
       } // while(1) through epoch nodes
@@ -1444,12 +1448,17 @@ class SkipList {
    private:
     std::atomic<size_t> inner_node_count_;
     std::atomic<size_t> head_node_count_;
+    std::atomic<size_t> epoch_node_count_;
+    std::atomic<size_t> garbage_node_count_;
 
    public:
-    NodeManager() : inner_node_count_(0), head_node_count_(0) {}
+    NodeManager() : inner_node_count_(0), head_node_count_(0),
+                                   epoch_node_count_(0), garbage_node_count_(0){}
     size_t GetFootprint() {
       return sizeof(SkipListBaseNode) * head_node_count_.load() +
-             sizeof(SkipListInnerNode) * inner_node_count_.load();
+             sizeof(SkipListInnerNode) * inner_node_count_.load() +
+             sizeof(EpochManager::EpochNode) * epoch_node_count_.load() +
+             sizeof(EpochManager::GarbageNode) * garbage_node_count_.load();
     }
     /*
      *
@@ -1500,11 +1509,35 @@ class SkipList {
       tmp->SetRoot(root);
       return tmp;
     }
+    /*
+     * GetEpochNode() - get an EpochNode
+     */
+    EpochManager::EpochNode *GetEpochNode(){
+      epoch_node_count_.fetch_add(1);
+      auto tmp = new EpochManager::EpochNode();
+      return tmp;
+    }
+    /*
+     * GetGarbageNode() - get a garbage node
+     */
+    EpochManager::GarbageNode *GetGarbageNode(){
+      garbage_node_count_.fetch_add(1);
+      auto tmp = new EpochManager::GarbageNode();
+      return tmp;
+    }
     void ReturnSkipListNode(SkipListBaseNode *node) {
       if (node->isHead_)
         head_node_count_.fetch_sub(1);
       else
         inner_node_count_.fetch_sub(1);
+      delete node;
+    }
+    void ReturnEpochNode(EpochManager::EpochNode *node) {
+      epoch_node_count_.fetch_sub(1);
+      delete node;
+    }
+    void ReturnGarbageNode(EpochManager::GarbageNode *node) {
+      garbage_node_count_.fetch_sub(1);
       delete node;
     }
   };
