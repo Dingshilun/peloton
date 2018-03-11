@@ -815,7 +815,7 @@ class SkipList {
     /*
      * Constructor - Create a forward iterator start from start_key in the list
      */
-    ForwardIterator(SkipList *list, const KeyType &start_key) {
+    ForwardIterator(SkipList *list, const KeyType &start_key):list_(list) {
       auto epoch_node_p = list_->epoch_manager_.JoinEpoch();
       OperationContext ctx{epoch_node_p};
 
@@ -917,7 +917,7 @@ class SkipList {
       auto epoch_node = this->list_->epoch_manager_.JoinEpoch();
       this->ctx_.epoch_node_ = epoch_node;
 
-      auto cursor = this->list_->skip_list_head_.load();
+      SkipListBaseNode * cursor = this->list_->skip_list_head_.load();
       while (cursor->down_.load()) {
         while (cursor->next_.load()) {
           cursor = GET_NEXT(cursor);
@@ -927,7 +927,7 @@ class SkipList {
       while (cursor->next_.load()) {
         cursor = cursor->next_.load();
       }
-      this->node_ = cursor;
+      this->node_ = reinterpret_cast<SkipListInnerNode *>(cursor);
       if (!IsEnd()) {
         kv_.first = &(this->node_->key_);
         kv_.second = &(this->node_->GetValue());
