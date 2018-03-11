@@ -610,30 +610,30 @@ class SkipList {
   SkipList(KeyComparator key_cmp_obj = KeyComparator{},
            KeyEqualityChecker key_eq_obj = KeyEqualityChecker{},
            ValueEqualityChecker val_eq_obj = ValueEqualityChecker{})
-      : key_cmp_obj_{key_cmp_obj},
+      : epoch_manager_(50),
+        key_cmp_obj_{key_cmp_obj},
         key_eq_obj_{key_eq_obj},
-        value_eq_obj_{val_eq_obj}, {
+        value_eq_obj_{val_eq_obj} {
     this->duplicate_support_ = true;
     this->GC_Interval_ = 50;
     this->max_level_ = SKIP_LIST_INITIAL_MAX_LEVEL_;
     this->skip_list_head_ = node_manager_.GetSkipListHead(0);
-    this->epoch_manager_ = new EpochManager(this->GC_Interval_);
+    this->epoch_manager_.StartEpochThread();
   }
   SkipList(bool duplicate, int GC_Interval,
            KeyComparator key_cmp_obj = KeyComparator{},
            KeyEqualityChecker key_eq_obj = KeyEqualityChecker{},
            ValueEqualityChecker val_eq_obj = ValueEqualityChecker{})
-      : duplicate_support_(duplicate),
+      : // Construct Epoch Manager
+        epoch_manager_(GC_Interval),
+        duplicate_support_(duplicate),
         GC_Interval_(GC_Interval),
 
         // Key comparator, equality checker
         key_cmp_obj_{key_cmp_obj},
         key_eq_obj_{key_eq_obj},
-        value_eq_obj_{val_eq_obj},
-
-        // Construct Epoch Manager
-        epoch_manager_(GC_Interval)
-
+        value_eq_obj_{val_eq_obj}
+  
   // Value equality checker and hasher
   {
     LOG_INFO("SkipList constructed!");
@@ -795,7 +795,7 @@ class SkipList {
     /*
      * Constructor - Create a forward iterator start from start_key in the list
      */
-    ForwardIterator(SkipList *list, const KeyType &start_key) {
+    ForwardIterator(SkipList *list, const KeyType &start_key):list_(list) {
       auto epoch_node_p = list_->epoch_manager_.JoinEpoch();
       OperationContext ctx{epoch_node_p};
 
@@ -1039,7 +1039,7 @@ class SkipList {
    * exist. Return true if delete succeeds
    */
   bool Delete(const KeyType &key, const ValueType &value) {
-    LOG_TRACE("Delete called!");
+    LOG_INFO("Delete called!");
     auto *epoch_node_p = epoch_manager_.JoinEpoch();
     OperationContext ctx{epoch_node_p};
     bool ret = Delete(key, value, ctx);
@@ -1085,6 +1085,7 @@ class SkipList {
   void PerformGC() {
     LOG_INFO("Perform garbage collection!");
     this->epoch_manager_.PerformGarbageCollection();
+    this->epoch_manager_.need_gc = false;
   }
 
   /*
@@ -1185,25 +1186,24 @@ class SkipList {
     }
   };
 
-  /**
-    * class EpochNode - A linked list of epoch node that records thread count
-    * and start garbage node
-    */
-  class EpochNode {
-  public:
-    // Track number of active threads to determine GC or not
-    std::atomic<int> active_txn_count;
-
-    // Head of garbage node list, GC nodes are CASed onto this pointer
-    std::atomic<GarbageNode *> garbage_list_p;
-
-    EpochNode *next_p;
-  };
 
   // maintains Epoch
   // has a inside linked list in which every node represents an epoch
   class EpochManager {
    public:
+    /**
+      * class EpochNode - A linked list of epoch node that records thread count
+      * and start garbage node
+      */
+    struct EpochNode {
+      // Track number of active threads to determine GC or not
+      std::atomic<int> active_txn_count;
+
+      // Head of garbage node list, GC nodes are CASed onto this pointer
+      std::atomic<GarbageNode *> garbage_list_p;
+
+      EpochNode *next_p;
+    };
     // Indicates whether destructor is running
     std::atomic<bool> destruct_flag;
 
@@ -1298,13 +1298,11 @@ class SkipList {
     inline EpochNode *JoinEpoch() {
     try_join_again:
       EpochNode *epoch_p = current_epoch_p;
-
       int64_t prev_count = epoch_p->active_txn_count.fetch_add(1);
       if (prev_count < 0) {
         epoch_p->active_txn_count.fetch_sub(1);
         goto try_join_again;
       }
-
       return epoch_p;
     };
 
@@ -1325,9 +1323,7 @@ class SkipList {
      * Need to atomically maintain the epoch list
      */
     void NewEpoch(){
-      LOG_TRACE("Creating new epoch...");
-
-      EpochNode *epoch_node_p = new EpochNode{};
+      EpochNode *epoch_node_p = new EpochNode();
 
       epoch_node_p->active_txn_count = 0;
       epoch_node_p->garbage_list_p = nullptr;
@@ -1397,6 +1393,7 @@ class SkipList {
     }
 
     void PerformGarbageCollection() {
+      LOG_INFO("Call Perform Garbage Collection!!!!!!");
       ClearEpoch();
       need_gc = false;
       return ;
@@ -1408,6 +1405,7 @@ class SkipList {
     void EpochThreadFunc() {
       while (!destruct_flag.load()){
         NewEpoch();
+        if(need_gc) PerformGarbageCollection();
 
         // Sleep for 50 ms
         std::chrono::microseconds duration(GC_Interval_);
