@@ -536,9 +536,9 @@ class SkipList {
                    UNUSED_ATTRIBUTE OperationContext &ctx) {
     auto set_ptr = GET_NEXT(del_node);
     auto cmp_ptr = reinterpret_cast<SkipListBaseNode *>(SET_FLAG(del_node, 1));
-    prev_node->next_.compare_exchange_strong(cmp_ptr, set_ptr);
+    auto res = prev_node->next_.compare_exchange_strong(cmp_ptr, set_ptr);
     // TODO: Notify EpochManager for GC
-    this->epoch_manager_.AddGarbageNode(del_node);
+    if(res) this->epoch_manager_.AddGarbageNode(del_node);
   }
 
   /*
@@ -1380,11 +1380,11 @@ class SkipList {
               garbage_node_p != nullptr; garbage_node_p = next_garbage_node_p) {
           next_garbage_node_p = garbage_node_p->next_p;
 
+          LOG_INFO("Delete garbage node, key:%s", garbage_node_p->node_p->key_.GetInfo().c_str());
           delete garbage_node_p;
         } // for
 
         EpochNode *next_epoch_node_p = head_epoch_p->next_p;
-
         delete head_epoch_p;
 
         head_epoch_p = next_epoch_node_p;
