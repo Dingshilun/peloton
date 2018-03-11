@@ -106,12 +106,11 @@ void SKIPLIST_INDEX_TYPE::Scan(
     UNUSED_ATTRIBUTE const std::vector<ExpressionType> &expr_list,
     ScanDirectionType scan_direction, std::vector<ValueType> &result,
     const ConjunctionScanPredicate *csp_p) {
-  // This is a hack - we do not support backward scan
   if (scan_direction == ScanDirectionType::INVALID) {
     throw Exception("Invalid scan direction \n");
   }
 
-  LOG_INFO("Scan() Point Query = %d; Full Scan = %d ", csp_p->IsPointQuery(),
+  LOG_INFO("Scan() Point Query = %d; Full Scan = %d", csp_p->IsPointQuery(),
            csp_p->IsFullIndexScan());
 
   if (csp_p->IsPointQuery()) {
@@ -163,12 +162,54 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
     UNUSED_ATTRIBUTE const std::vector<type::Value> &value_list,
     UNUSED_ATTRIBUTE const std::vector<oid_t> &tuple_column_id_list,
     UNUSED_ATTRIBUTE const std::vector<ExpressionType> &expr_list,
-    UNUSED_ATTRIBUTE ScanDirectionType scan_direction,
-    UNUSED_ATTRIBUTE std::vector<ValueType> &result,
-    UNUSED_ATTRIBUTE const ConjunctionScanPredicate *csp_p,
-    UNUSED_ATTRIBUTE uint64_t limit, UNUSED_ATTRIBUTE uint64_t offset) {
-  // TODO: Add your implementation here
-  return;
+    ScanDirectionType scan_direction, std::vector<ValueType> &result,
+    const ConjunctionScanPredicate *csp_p, uint64_t limit, uint64_t offset) {
+  if (scan_direction == ScanDirectionType::INVALID) {
+    throw Exception("Invalid scan direction \n");
+  }
+
+  LOG_INFO(
+      "ScanLimit() Point Query = %d; Full Scan = %d; limit = %lu; offset = %lu",
+      csp_p->IsPointQuery(), csp_p->IsFullIndexScan(), limit, offset);
+
+  uint64_t count = 0;
+  if (csp_p->IsPointQuery()) {
+    const storage::Tuple *point_query_key_p = csp_p->GetPointQueryKey();
+
+    KeyType point_query_key;
+    point_query_key.SetFromKey(point_query_key_p);
+
+    container.GetValueLimit(point_query_key, result, limit, offset);
+  } else if (csp_p->IsFullIndexScan()) {
+    auto scan_itr = container.ForwardBegin();
+    for (; !scan_itr.IsEnd() && count < offset + limit; scan_itr++) {
+      if (count >= offset) {
+        result.push_back(scan_itr->second);
+      }
+      count++;
+    }
+  } else {
+    const storage::Tuple *low_key_p = csp_p->GetLowKey();
+    const storage::Tuple *high_key_p = csp_p->GetHighKey();
+
+    LOG_INFO("Partial scanLimit low key: %s\n high key: %s",
+             low_key_p->GetInfo().c_str(), high_key_p->GetInfo().c_str());
+
+    KeyType index_low_key;
+    KeyType index_high_key;
+    index_low_key.SetFromKey(low_key_p);
+    index_high_key.SetFromKey(high_key_p);
+
+    auto scan_itr = container.ForwardBegin(index_low_key);
+    for (; !scan_itr.IsEnd() && count < offset + limit &&
+               container.KeyCmpLessEqual(scan_itr->first, index_high_key);
+         scan_itr++) {
+      if (count >= offset) {
+        result.push_back(scan_itr->second);
+      }
+      count++;
+    }
+  }
 }
 
 SKIPLIST_TEMPLATE_ARGUMENTS

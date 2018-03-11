@@ -94,6 +94,34 @@ class SkipList {
   }
 
   /*
+   * GetLimit() - Search a key in the skip-list and fill in the value_list with
+   * offset and limit
+   *
+   * The return value is a indicator of the success get
+   */
+  bool GetLimit(const KeyType &key, std::vector<ValueType> &value_list,
+                uint64_t limit, uint64_t offset, OperationContext &ctx) {
+    LOG_INFO("Get()");
+    auto pair = Search(key, ctx);
+    auto node = pair.second;
+    uint64_t count = 0;
+    while (node != nullptr && KeyCmpEqual(node->key_, key) &&
+           count < offset + limit) {
+      if (CHECK_DELETE(node)) {
+        node = GET_NEXT(node);
+        continue;
+      }
+      if (count >= offset) {
+        value_list.push_back(
+            static_cast<SkipListInnerNode *>(node)->GetValue());
+      }
+      node = GET_NEXT(node);
+      count++;
+    }
+    return true;
+  }
+
+  /*
    * Search() - Search the first interval that node1.key < key and key <=
    * node2.key
    *
@@ -1053,6 +1081,26 @@ class SkipList {
     auto *epoch_node_p = epoch_manager_.JoinEpoch();
     OperationContext ctx{epoch_node_p};
     bool ret = Get(search_key, value_list, ctx);
+    epoch_manager_.LeaveEpoch(epoch_node_p);
+    return ret;
+  }
+
+  /*
+   * GetValueLimit() - Fill a limited number of value to the list.
+   *
+   * This function accepts a value list as argument,
+   * and will copy a limited number of values start from a offset into the list
+   *
+   * The return value is used to indicate whether the value set
+   * is empty or not
+   */
+  bool GetValueLimit(const KeyType &search_key,
+                     std::vector<ValueType> &value_list, uint64_t limit,
+                     uint64_t offset) {
+    LOG_INFO("GetValue()");
+    auto *epoch_node_p = epoch_manager_.JoinEpoch();
+    OperationContext ctx{epoch_node_p};
+    bool ret = GetLimit(search_key, value_list, limit, offset, ctx);
     epoch_manager_.LeaveEpoch(epoch_node_p);
     return ret;
   }
