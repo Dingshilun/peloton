@@ -172,6 +172,7 @@ class SkipList {
   NodePair SearchFrom(const KeyType &key, const SkipListBaseNode *Node,
                       OperationContext &ctx) {
     // TODO: physically deletion when search in the list
+    //LOG_INFO("SearchFrom key:%s", key.GetInfo().c_str());
     if (Node == nullptr) {
       return std::make_pair(nullptr, nullptr);
     }
@@ -538,7 +539,7 @@ class SkipList {
     auto cmp_ptr = reinterpret_cast<SkipListBaseNode *>(SET_FLAG(del_node, 1));
     auto res = prev_node->next_.compare_exchange_strong(cmp_ptr, set_ptr);
     // TODO: Notify EpochManager for GC
-    if(res) this->epoch_manager_.AddGarbageNode(del_node);
+    if(res) this->epoch_manager_.AddGarbageNode(ctx.epoch_node_, del_node);
   }
 
   /*
@@ -1207,6 +1208,12 @@ class SkipList {
     // Indicates whether destructor is running
     std::atomic<bool> destruct_flag;
 
+    // Counter indicates whether gc is needed
+    std::atomic<int> garbage_node_counter;
+
+    // Threshold for gc
+    const static int gc_threshold = 2000;
+
     // Only accessed by epoch manager
     EpochNode *head_epoch_p;
 
@@ -1230,6 +1237,7 @@ class SkipList {
 
       head_epoch_p = current_epoch_p;
 
+      garbage_node_counter = 0;
       destruct_flag.store(false);
       need_gc = false;
 
@@ -1268,15 +1276,12 @@ class SkipList {
       return ;
     }
 
-    void AddGarbageNode(SkipListBaseNode *node) {
-      EpochNode *epoch_p = current_epoch_p;
-
+    void AddGarbageNode(EpochNode *epoch_p, SkipListBaseNode *node) {
       GarbageNode *garbage_node_p = new GarbageNode;
       garbage_node_p->node_p = node;
       garbage_node_p->next_p = epoch_p->garbage_list_p.load();
 
       while(1) {
-        // Then CAS previous node with new garbage node, retry if failed
         bool ret = epoch_p->garbage_list_p.compare_exchange_strong(
             garbage_node_p->next_p, garbage_node_p);
 
@@ -1284,9 +1289,14 @@ class SkipList {
           break;
         } else {
           LOG_TRACE("Add garbage node CAS failed. Retry");
+          garbage_node_p->next_p = epoch_p->garbage_list_p.load();
         }
       } // while 1
-      need_gc = true;
+      garbage_node_counter.fetch_add(1);
+      int cur_counter = garbage_node_counter.load();
+      if(cur_counter > gc_threshold){
+        need_gc = true;
+      }
       return ;
     }
 
@@ -1351,7 +1361,7 @@ class SkipList {
 
       while (1) {
         if (head_epoch_p == current_epoch_p) {
-          LOG_TRACE("Current epoch is head epoch. Do not clean");
+    LOG_TRACE("Current epoch is head epoch. Do not clean");
           break;
         }
 
@@ -1380,8 +1390,9 @@ class SkipList {
               garbage_node_p != nullptr; garbage_node_p = next_garbage_node_p) {
           next_garbage_node_p = garbage_node_p->next_p;
 
-          LOG_INFO("Delete garbage node, key:%s", garbage_node_p->node_p->key_.GetInfo().c_str());
-          delete garbage_node_p;
+          //LOG_INFO("Delete garbage node, key:%s", garbage_node_p->node_p->key_.GetInfo().c_str());
+          
+          garbage_node_counter.fetch_sub(1);
         } // for
 
         EpochNode *next_epoch_node_p = head_epoch_p->next_p;
