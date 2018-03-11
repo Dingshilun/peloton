@@ -46,13 +46,13 @@ bool SKIPLIST_INDEX_TYPE::InsertEntry(const storage::Tuple *key,
                                       ItemPointer *value) {
   KeyType index_key;
   index_key.SetFromKey(key);
-  //LOG_INFO("InsertEntrybefore(%s)",key->GetValue(0).GetInfo().c_str());
-  //LOG_INFO("InsertEntrybefore(%s)",key->GetValue(1).GetInfo().c_str());
-  //LOG_INFO("InsertEntrybefore(%s)",IndexUtil::GetInfo(value).c_str());
+  // LOG_INFO("InsertEntrybefore(%s)",key->GetValue(0).GetInfo().c_str());
+  // LOG_INFO("InsertEntrybefore(%s)",key->GetValue(1).GetInfo().c_str());
+  // LOG_INFO("InsertEntrybefore(%s)",IndexUtil::GetInfo(value).c_str());
   bool ret = container.Insert(index_key, value);
 
   LOG_INFO("InsertEntry(key=%s, val=%s) [%s]", index_key.GetInfo().c_str(),
-          IndexUtil::GetInfo(value).c_str(), (ret ? "SUCCESS" : "FAIL"));
+           IndexUtil::GetInfo(value).c_str(), (ret ? "SUCCESS" : "FAIL"));
 
   return ret;
 }
@@ -121,9 +121,16 @@ void SKIPLIST_INDEX_TYPE::Scan(
 
     container.GetValue(point_query_key, result);
   } else if (csp_p->IsFullIndexScan()) {
-    for (auto scan_itr = container.ForwardBegin(); !scan_itr.IsEnd();
-         scan_itr++) {
-      result.push_back(*(scan_itr->second));
+    if (scan_direction == ScanDirectionType::FORWARD) {
+      for (auto scan_itr = container.ForwardBegin(); !scan_itr.IsEnd();
+           scan_itr++) {
+        result.push_back(*(scan_itr->second));
+      }
+    } else {
+      for (auto scan_itr = container.ReverseBegin(); !scan_itr.IsEnd();
+           scan_itr++) {
+        result.push_back(*(scan_itr->second));
+      }
     }
   } else {
     const storage::Tuple *low_key_p = csp_p->GetLowKey();
@@ -144,9 +151,11 @@ void SKIPLIST_INDEX_TYPE::Scan(
         result.push_back(*(scan_itr->second));
       }
     } else {
-      //scanning backwards
-      for (auto scan_itr = container.ReverseBegin(index_high_key); (!scan_itr.IsEnd()) && container
-          .KeyCmpGreaterEqual(*(scan_itr->first), index_low_key); scan_itr++){
+      // Scanning backwards
+      for (auto scan_itr = container.ReverseBegin(index_high_key);
+           (!scan_itr.IsEnd()) &&
+               container.KeyCmpGreaterEqual(*(scan_itr->first), index_low_key);
+           scan_itr++) {
         result.push_back(*(scan_itr->second));
       }
     }
@@ -181,12 +190,22 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
 
     container.GetValueLimit(point_query_key, result, limit, offset);
   } else if (csp_p->IsFullIndexScan()) {
-    auto scan_itr = container.ForwardBegin();
-    for (; !scan_itr.IsEnd() && count < offset + limit; scan_itr++) {
-      if (count >= offset) {
-        result.push_back(scan_itr->second);
+    if (scan_direction == ScanDirectionType::FORWARD) {
+      auto scan_itr = container.ForwardBegin();
+      for (; !scan_itr.IsEnd() && count < offset + limit; scan_itr++) {
+        if (count >= offset) {
+          result.push_back(*(scan_itr->second));
+        }
+        count++;
       }
-      count++;
+    } else {
+      auto scan_itr = container.ReverseBegin();
+      for (; !scan_itr.IsEnd() && count < offset + limit; scan_itr++) {
+        if (count >= offset) {
+          result.push_back(*(scan_itr->second));
+        }
+        count++;
+      }
     }
   } else {
     const storage::Tuple *low_key_p = csp_p->GetLowKey();
@@ -200,14 +219,27 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
     index_low_key.SetFromKey(low_key_p);
     index_high_key.SetFromKey(high_key_p);
 
-    auto scan_itr = container.ForwardBegin(index_low_key);
-    for (; !scan_itr.IsEnd() && count < offset + limit &&
-               container.KeyCmpLessEqual(scan_itr->first, index_high_key);
-         scan_itr++) {
-      if (count >= offset) {
-        result.push_back(scan_itr->second);
+    if (scan_direction == ScanDirectionType::FORWARD) {
+      auto scan_itr = container.ForwardBegin(index_low_key);
+      for (; !scan_itr.IsEnd() && count < offset + limit &&
+                 container.KeyCmpLessEqual(*(scan_itr->first), index_high_key);
+           scan_itr++) {
+        if (count >= offset) {
+          result.push_back(*(scan_itr->second));
+        }
+        count++;
       }
-      count++;
+    } else {
+      auto scan_itr = container.ReverseBegin(index_high_key);
+      for (;
+           !scan_itr.IsEnd() && count < offset + limit &&
+               container.KeyCmpGreaterEqual(*(scan_itr->first), index_low_key);
+           scan_itr++) {
+        if (count >= offset) {
+          result.push_back(*(scan_itr->second));
+        }
+        count++;
+      }
     }
   }
 }
