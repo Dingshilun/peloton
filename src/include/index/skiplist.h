@@ -352,6 +352,30 @@ class SkipList {
           call_stack[i] = SearchFrom(key, call_stack[i].first, ctx);
       } while (!insert_flag);
     }
+    //verify the whole tower to not be deleted
+    if (CHECK_DELETE(tower[0])){
+      //go through the whole tower to verify
+      for (int i = tower.size()-1;i>=0;i++){
+        if (CHECK_DELETE(tower[i]))
+          break;
+        auto pair = SearchFrom(tower[0]->key_, call_stack[i].first, ctx);
+        //delete this level in the tower
+        auto tmp_pair = SearchKeyValueInList(tower[0]->key_, tower[0]->GetValue(), pair.first, pair.second);
+        //retry until deleted the node
+        while (tmp_pair.first && !CHECK_DELETE(tower[i])) {
+          auto ret = TryFlag(tmp_pair.first, tmp_pair.second, ctx);
+          if (ret.first) {
+            if (ret.second) {
+              //need to delete by ourselves
+              //else just retry
+              HelpFlagged(tmp_pair.first, tmp_pair.second, ctx);
+            }
+          }
+          tmp_pair = SearchKeyValueInList(tower[0]->key_, tower[0]->GetValue(), call_stack[i].first,
+                                          call_stack[i].second);
+        }
+      }
+    }
     if (predicate_satisfied != nullptr) *predicate_satisfied = true;
     return true;
   }
@@ -438,7 +462,7 @@ class SkipList {
    *
    * return the prev of the node to delete
    */
-  SkipListBaseNode *SearchKeyValueInList(const KeyType &key,
+  NodePair SearchKeyValueInList(const KeyType &key,
                                          const ValueType &value,
                                          SkipListBaseNode *prev,
                                          SkipListBaseNode *del) {
@@ -446,44 +470,76 @@ class SkipList {
     while (del && KeyCmpEqual(del->key_, key)) {
       auto inner_node = static_cast<SkipListInnerNode *>(del);
       if (ValueCmpEqual(inner_node->GetRootValue(), value)) {
-        return prev;
+        return std::make_pair(prev, del);
       } else {
         prev = del;
         del = GET_NEXT(del);
       }
     }
-    return nullptr;
+    return std::make_pair(nullptr, nullptr);
   }
 
   /*
    * DeleteNode() - Try delete the key value pair from the skip list
    *
    * return true if successful deleted
+   *
+   * Modified By Shilun: delete the node from top down
    */
   bool DeleteNode(const KeyType &key, const ValueType &value, NodePair &pair,
                   OperationContext &ctx) {
     LOG_INFO("DeleteNode()");
     SkipListBaseNode *prev_node = pair.first;
-    SkipListBaseNode *del_node = pair.second;
+    SkipListInnerNode*del_node = reinterpret_cast<SkipListInnerNode *>(pair.second);
     bool result = false;
+//    if (prev_node && del_node) {
+//      // Tries to flag the prev node
+//      auto flag_pair = TryFlag(prev_node, del_node, ctx);
+//
+//      prev_node = flag_pair.first;
+//      result = flag_pair.second;
+//      // Attempts to remove the del_node from list
+//      if (prev_node != nullptr) {
+//        HelpFlagged(prev_node, del_node, ctx);
+//      }
+//      // Node deleted by this process
+//      if (result) {
+//        // Cleanup the superfluous tower
+//        std::vector<NodePair> call_stack;
+//        SearchWithPath(call_stack, key, skip_list_head_.load(), ctx);
+//        for (auto node : call_stack) {
+//          auto to_del_pair =
+//              SearchKeyValueInList(key, value, node.first, node.second);
+//          SearchFrom(key, to_del_pair, ctx);
+//        }
+//      }
+//    }
     if (prev_node && del_node) {
-      // Tries to flag the prev node
-      auto flag_pair = TryFlag(prev_node, del_node, ctx);
-      prev_node = flag_pair.first;
-      result = flag_pair.second;
-      // Attempts to remove the del_node from list
-      if (prev_node != nullptr) {
-        HelpFlagged(prev_node, del_node, ctx);
-      }
-      // Node deleted by this process
+      //mark the delete node first
+      //in case that it belongs to a tower that is being inserted
+      result = TryDelete(del_node, ctx);
       if (result) {
-        // Cleanup the superfluous tower
         std::vector<NodePair> call_stack;
-        SearchWithPath(call_stack, key, skip_list_head_.load(), ctx);
-        for (auto node : call_stack) {
-          auto to_del_pair =
-              SearchKeyValueInList(key, value, node.first, node.second);
-          SearchFrom(key, to_del_pair, ctx);
+        auto head = this->skip_list_head_.load();
+        SearchWithPath(call_stack, key, head, ctx);
+        // delete the tower from top if possible
+        for (int i = call_stack.size() - 1; i >= 0; i--) {
+          NodePair tmp_pair = SearchKeyValueInList(key, value, call_stack[i].first,
+                                                   call_stack[i].second);
+          while (tmp_pair.first) {
+            //found something to delete
+            auto ret = TryFlag(tmp_pair.first, tmp_pair.second, ctx);
+            LOG_INFO("looping");
+            if (ret.first) {
+              //need to delete by ourselves
+              //else just retry
+              HelpFlagged(tmp_pair.first, tmp_pair.second, ctx);
+            }
+            tmp_pair = SearchKeyValueInList(key, value, call_stack[i].first,
+                                            call_stack[i].second);
+            if (CHECK_DELETE(call_stack[i].second))
+              break;
+          }
         }
       }
     }
@@ -562,16 +618,18 @@ class SkipList {
   /*
    * TryDelete() Attempts to mark the node del node.
    */
-  void TryDelete(SkipListBaseNode *del_node, OperationContext &ctx) {
+  bool TryDelete(SkipListBaseNode *del_node, OperationContext &ctx) {
+    bool ret = false;
     while (!CHECK_DELETE(del_node)) {
       auto cmp_ptr = GET_NEXT(del_node);
       auto set_ptr =
           reinterpret_cast<SkipListBaseNode *> SET_DELETE(cmp_ptr, 1);
-      del_node->next_.compare_exchange_strong(cmp_ptr, set_ptr);
+      ret = del_node->next_.compare_exchange_strong(cmp_ptr, set_ptr);
       if (CHECK_FLAG(del_node)) {
         HelpFlagged(del_node, GET_NEXT(del_node), ctx);
       }
     }
+    return ret;
   }
 
   /*
@@ -1419,7 +1477,7 @@ class SkipList {
     void EpochThreadFunc() {
       while (!destruct_flag.load()){
         NewEpoch();
-        if(need_gc) PerformGarbageCollection();
+        PerformGarbageCollection();
 
         // Sleep for 50 ms
         std::chrono::microseconds duration(GC_Interval_);
