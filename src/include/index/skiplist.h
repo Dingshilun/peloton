@@ -539,7 +539,7 @@ class SkipList {
     auto cmp_ptr = reinterpret_cast<SkipListBaseNode *>(SET_FLAG(del_node, 1));
     auto res = prev_node->next_.compare_exchange_strong(cmp_ptr, set_ptr);
     // TODO: Notify EpochManager for GC
-    if(res) this->epoch_manager_.AddGarbageNode(ctx.epoch_node_, del_node);
+    if(res) this->epoch_manager_.AddGarbageNode(del_node);
     else LOG_INFO("CAS failed in HelpDeleted!!!!!!!");
   }
 
@@ -1206,11 +1206,8 @@ class SkipList {
     // Indicates whether destructor is running
     std::atomic<bool> destruct_flag;
 
-    // Counter indicates whether gc is needed
-    //std::atomic<int> garbage_node_counter;
-
     // Threshold for gc
-    const static int gc_threshold = 2000;
+    const static int gc_threshold = 5;
 
     // Only accessed by epoch manager
     EpochNode *head_epoch_p;
@@ -1238,7 +1235,6 @@ class SkipList {
 
       head_epoch_p = current_epoch_p;
 
-      //garbage_node_counter = 0;
       destruct_flag.store(false);
       need_gc = false;
 
@@ -1277,7 +1273,10 @@ class SkipList {
       return ;
     }
 
-    void AddGarbageNode(EpochNode *epoch_p, SkipListBaseNode *node) {
+    // This function is called by worker threads, so has to consider race conditions.
+    void AddGarbageNode(SkipListBaseNode *node) {
+      EpochNode *epoch_p = current_epoch_p;
+        
       GarbageNode *garbage_node_p = node_manager_epoch_->GetGarbageNode();
       garbage_node_p->node_p = node;
       garbage_node_p->next_p = epoch_p->garbage_list_p.load();
@@ -1290,14 +1289,12 @@ class SkipList {
           break;
         } else {
           LOG_TRACE("Add garbage node CAS failed. Retry");
-          garbage_node_p->next_p = epoch_p->garbage_list_p.load();
         }
       } // while 1
-      //garbage_node_counter.fetch_add(1);
-      //int cur_counter = garbage_node_counter.load();
       int cur_counter = node_manager_epoch_->GetGarbageNodeCount();
       if(cur_counter > gc_threshold){
         need_gc = true;
+        LOG_INFO("Need gc set to true!!!!");
       }
       return ;
     }
@@ -1395,7 +1392,6 @@ class SkipList {
           //LOG_INFO("Delete garbage node, key:%s", garbage_node_p->node_p->key_.GetInfo().c_str());
           node_manager_epoch_->ReturnSkipListNode(garbage_node_p->node_p);
           node_manager_epoch_->ReturnGarbageNode(garbage_node_p);
-          //garbage_node_counter.fetch_sub(1);
         } // for
 
         EpochNode *next_epoch_node_p = head_epoch_p->next_p;
@@ -1420,6 +1416,7 @@ class SkipList {
       while (!destruct_flag.load()){
         NewEpoch();
         if(need_gc) PerformGarbageCollection();
+        else LOG_INFO("Don't need gc, Garbage node count:%lu\n", node_manager_epoch_->GetGarbageNodeCount());
 
         // Sleep for 50 ms
         std::chrono::microseconds duration(GC_Interval_);
