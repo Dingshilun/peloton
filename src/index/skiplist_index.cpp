@@ -124,7 +124,7 @@ void SKIPLIST_INDEX_TYPE::Scan(
   } else if (csp_p->IsFullIndexScan()) {
     for (auto scan_itr = container.ForwardBegin(); !scan_itr.IsEnd();
          scan_itr++) {
-      result.push_back(scan_itr->second);
+      result.push_back(*(scan_itr->second));
     }
   } else {
     const storage::Tuple *low_key_p = csp_p->GetLowKey();
@@ -140,15 +140,15 @@ void SKIPLIST_INDEX_TYPE::Scan(
     if (scan_direction == ScanDirectionType::FORWARD) {
       for (auto scan_itr = container.ForwardBegin(index_low_key);
            (scan_itr.IsEnd() == false) &&
-               (container.KeyCmpLessEqual(scan_itr->first, index_high_key));
+               (container.KeyCmpLessEqual(*(scan_itr->first), index_high_key));
            scan_itr++) {
-        result.push_back(scan_itr->second);
+        result.push_back(*(scan_itr->second));
       }
     } else {
       //scanning backwards
       for (auto scan_itr = container.ReverseBegin(index_high_key); (!scan_itr.IsEnd()) && container
-          .KeyCmpGreaterEqual(scan_itr->first, index_low_key); scan_itr++){
-        result.push_back(scan_itr->second);
+          .KeyCmpGreaterEqual(*(scan_itr->first), index_low_key); scan_itr++){
+        result.push_back(*(scan_itr->second));
       }
     }
   }
@@ -178,7 +178,7 @@ void SKIPLIST_INDEX_TYPE::ScanAllKeys(std::vector<ValueType> &result) {
 
   // scan all entries
   while (it.IsEnd() == false) {
-    result.push_back(it->second);
+    result.push_back(*(it->second));
     it++;
   }
 }
