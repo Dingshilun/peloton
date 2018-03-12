@@ -746,9 +746,9 @@ void TestingIndexUtil::NonUniqueKeyMultiThreadedStressTest2(
   location_ptrs.clear();
 }
 
-void TestingIndexUtil::RandomPatternTest(const IndexType index_type){
+void TestingIndexUtil::RandomPatternTest(const IndexType index_type) {
   auto pool = TestingHarness::GetInstance().GetTestingPool();
-  
+
   // INDEX
   std::unique_ptr<index::Index, void (*)(index::Index *)> index(
       TestingIndexUtil::BuildIndex(index_type, false), DestroyIndex);
@@ -973,27 +973,21 @@ void TestingIndexUtil::RandomHelper(index::Index *index,
     std::shared_ptr<storage::Tuple> keynonce(
         new storage::Tuple(key_schema, true));
 
-    key0->SetValue(0, type::ValueFactory::GetIntegerValue(100 * key_itr),
-                   pool);
+    key0->SetValue(0, type::ValueFactory::GetIntegerValue(100 * key_itr), pool);
     key0->SetValue(1, type::ValueFactory::GetVarcharValue("a"), pool);
-    key1->SetValue(0, type::ValueFactory::GetIntegerValue(100 * key_itr),
-                   pool);
+    key1->SetValue(0, type::ValueFactory::GetIntegerValue(100 * key_itr), pool);
     key1->SetValue(1, type::ValueFactory::GetVarcharValue("b"), pool);
-    key2->SetValue(0, type::ValueFactory::GetIntegerValue(100 * key_itr),
-                   pool);
+    key2->SetValue(0, type::ValueFactory::GetIntegerValue(100 * key_itr), pool);
     key2->SetValue(1, type::ValueFactory::GetVarcharValue("c"), pool);
-    key3->SetValue(0, type::ValueFactory::GetIntegerValue(400 * key_itr),
-                   pool);
+    key3->SetValue(0, type::ValueFactory::GetIntegerValue(400 * key_itr), pool);
     key3->SetValue(1, type::ValueFactory::GetVarcharValue("d"), pool);
-    key4->SetValue(0, type::ValueFactory::GetIntegerValue(500 * key_itr),
-                   pool);
+    key4->SetValue(0, type::ValueFactory::GetIntegerValue(500 * key_itr), pool);
     key4->SetValue(
         1, type::ValueFactory::GetVarcharValue(StringUtil::Repeat("e", 1000)),
         pool);
     keynonce->SetValue(0, type::ValueFactory::GetIntegerValue(1000 * key_itr),
                        pool);
     keynonce->SetValue(1, type::ValueFactory::GetVarcharValue("f"), pool);
-
 
     keys.push_back(key0);
     keys.push_back(key1);
@@ -1031,15 +1025,15 @@ void TestingIndexUtil::RandomHelper(index::Index *index,
       type::Value key_val1 = keys[key_idx]->GetValue(1);
       // scan test
       if (key_idx % 2 == 0) {
-        index->ScanTest({key_val0, key_val1}, {0, 1}, 
-                      {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
-                       ExpressionType::COMPARE_GREATERTHANOREQUALTO},
-                      ScanDirectionType::FORWARD, location_ptrs);
+        index->ScanTest({key_val0, key_val1}, {0, 1},
+                        {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                         ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+                        ScanDirectionType::FORWARD, location_ptrs);
       } else {
-        index->ScanTest({key_val0, key_val1}, {0, 1}, 
-                      {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
-                       ExpressionType::COMPARE_GREATERTHANOREQUALTO},
-                      ScanDirectionType::BACKWARD, location_ptrs);
+        index->ScanTest({key_val0, key_val1}, {0, 1},
+                        {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                         ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+                        ScanDirectionType::BACKWARD, location_ptrs);
       }
       location_ptrs.clear();
     }

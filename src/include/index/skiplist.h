@@ -25,6 +25,7 @@
 namespace peloton {
 namespace index {
 
+// Macro utility functions to perform bit or pointer operations
 #define WORD(x) reinterpret_cast<std::uintptr_t>((x))
 #define GET_DELETE(addr) ((WORD((addr))) & 1ll)
 #define GET_FLAG(addr) ((WORD((addr))) & 2ll)
@@ -86,7 +87,6 @@ class SkipList {
    */
   bool Get(const KeyType &key, std::vector<ValueType> &value_list,
            OperationContext &ctx) {
-    // LOG_INFO("Get()");
     auto pair = Search(key, ctx);
     auto node = pair.second;
     while (node != nullptr && KeyCmpEqual(node->key_, key)) {
@@ -99,7 +99,6 @@ class SkipList {
     }
     return true;
   }
-
   /*
    * GetLimit() - Search a key in the skip-list and fill in the value_list with
    * offset and limit
@@ -108,7 +107,6 @@ class SkipList {
    */
   bool GetLimit(const KeyType &key, std::vector<ValueType> &value_list,
                 uint64_t limit, uint64_t offset, OperationContext &ctx) {
-    LOG_INFO("Get()");
     auto pair = Search(key, ctx);
     auto node = pair.second;
     uint64_t count = 0;
@@ -127,7 +125,6 @@ class SkipList {
     }
     return true;
   }
-
   /*
    * Search() - Search the first interval that node1.key < key and key <=
    * node2.key
@@ -251,8 +248,7 @@ class SkipList {
    */
   NodePair SearchFrom(const KeyType &key, const SkipListBaseNode *Node,
                       UNUSED_ATTRIBUTE OperationContext &ctx) {
-    // TODO: physically deletion when search in the list
-    // LOG_INFO("SearchFrom key:%s", key.GetInfo().c_str());
+    // physically deletion when search in the list
     if (Node == nullptr) {
       return std::make_pair(nullptr, nullptr);
     }
@@ -276,7 +272,6 @@ class SkipList {
     }
     return std::make_pair(nullptr, nullptr);
   }
-
   /*
    * SearchWithPath() - Search the skiplist for the key, would store the path of
    * every level
@@ -303,8 +298,6 @@ class SkipList {
                                 : expected_stored_level;
     u_int32_t level_now = curr_node->level_;
     call_stack.resize(expected_stored_level + 1);
-    // LOG_INFO("SearchWithPath %d, levelNow: %u", expected_stored_level,
-    //         level_now);
     while (level_now >= 0) {
       if (level_now <= expected_stored_level) {
         call_stack[level_now] = SearchFrom(key, curr_node, ctx);
@@ -317,7 +310,6 @@ class SkipList {
       level_now--;
     }
   }
-
   /*
  * AddLevel() - add corresponding level to the SkipList
  *
@@ -325,7 +317,6 @@ class SkipList {
  * return false if the level cannot be reached from the highest level now
  */
   bool AddLevel(u_int32_t level) {
-    // LOG_INFO("AddLevel %u", level);
     SkipListBaseNode *head = this->skip_list_head_.load();
     if (head->level_ + 1 < level) {
       return false;
@@ -345,7 +336,6 @@ class SkipList {
       }
     }
   }
-
   /*
    * InsertTowerIntoInterval() - this method would try to insert the tower into
    * the interval and retry due to contention
@@ -366,20 +356,10 @@ class SkipList {
       bool check_multiple_key_value = false,
       std::function<bool(const void *)> predicate = nullptr,
       bool *predicate_satisfied = nullptr) {
-    // LOG_INFO("InsertTower");
     u_int32_t expected_level = tower.size();
     for (u_int32_t i = start_level; i < expected_level; i++) {
       bool insert_flag = false;
       do {
-        //        if (i != 0 && CHECK_DELETE(tower[i]->GetRoot().load())) {
-        //          // the root has been deleted
-        //          // there is no need to continue
-        //          for (auto j = i; j < expected_level; j++) {
-        //            epoch_manager_.AddGarbageNode(tower[j]);
-        //          }
-        //          return true;
-        //        }
-
         // if the level is 0, multiple key-value pair is required
         // if the check bool is true, then it should be non-unique index
         if (i == 0) {
@@ -460,8 +440,6 @@ class SkipList {
                   OperationContext &ctx,
                   std::function<bool(const void *)> predicate = nullptr,
                   bool *predicate_satisfied = nullptr) {
-    // LOG_INFO("Insert node");
-
     u_int32_t expected_level = 0;
 
     while (expected_level < max_level_) {
@@ -530,7 +508,6 @@ class SkipList {
       return InsertTowerIntoInterval(key, tower, call_stack, ctx, 1);
     }
   }
-
   /*
    * SearchKeyValueInList() - Search specific key value pair in the current
    * level
@@ -539,7 +516,6 @@ class SkipList {
    */
   NodePair SearchKeyValueInList(const KeyType &key, const ValueType &value,
                                 SkipListBaseNode *prev, SkipListBaseNode *del) {
-    // LOG_INFO("Search Key Value in list");
     PL_ASSERT(prev != nullptr);
     while (del && KeyCmpEqual(del->key_, key)) {
       auto inner_node = static_cast<SkipListInnerNode *>(del);
@@ -562,7 +538,6 @@ class SkipList {
     auto target = tmp_pair.second;
     auto previous = tmp_pair.first;
     bool indicator = false;
-    // LOG_INFO("getting int delete single node: %p, %p", root, start);
     while (target) {
       // found something to delete
       // flag its previous node to notify other deleters
@@ -570,7 +545,6 @@ class SkipList {
       if (indicator) {
         // flag succeed, we can try to delete the node
         HelpFlagged(previous, target, ctx);
-        // LOG_INFO("deleted previous:%p target:%p", previous, target);
         break;
       }
       // if we didn't find the previous node, then the node has been deleted
@@ -629,7 +603,6 @@ class SkipList {
    */
   bool Delete(const KeyType &key, const ValueType &value,
               OperationContext &ctx) {
-    // LOG_INFO("Delete()");
     NodePair pair = Search(key, ctx);
     SkipListBaseNode *prev_node = pair.first;
     SkipListBaseNode *del_node = pair.second;
@@ -672,9 +645,8 @@ class SkipList {
 
     while (!prev_node->next_.compare_exchange_strong(cmp_ptr, set_ptr))
       ;
-    // TODO: Notify EpochManager for GC
+    // Notify EpochManager for GC
     this->epoch_manager_.AddGarbageNode(del_node);
-    // else LOG_INFO("CAS failed in HelpDeleted!!!!!!!");
   }
 
   /*
@@ -706,11 +678,6 @@ class SkipList {
       auto set_ptr =
           reinterpret_cast<SkipListBaseNode *> SET_DELETE(cmp_ptr, 1);
       ret = del_node->next_.compare_exchange_strong(cmp_ptr, set_ptr);
-      //      cannot do this now, as nodes can only be deleted by its own
-      //      deleter
-      //      if (CHECK_FLAG(del_node)) {
-      //        HelpFlagged(del_node, GET_NEXT(del_node), ctx);
-      //      }
     }
     return ret;
   }
@@ -769,7 +736,6 @@ class SkipList {
 
   // Value equality checker and hasher
   {
-    // LOG_INFO("SkipList constructed!");
     this->max_level_ = SKIP_LIST_INITIAL_MAX_LEVEL_;
     this->skip_list_head_ = node_manager_.GetSkipListHead(0);
     // Start epoch thread
@@ -780,10 +746,7 @@ class SkipList {
    * when calling this, need to make sure that no other threads exist
    */
   ~SkipList() {
-    // TODO: deconstruct all nodes in the skip list
-    // LOG_INFO("SkipList deconstructed!");
-    // LOG_INFO("footprint: %lu", this->GetMemoryFootprint());
-    node_manager_.PrintFootprint();
+    // deconstruct all nodes in the skip list
     auto head = this->skip_list_head_.load();
     std::vector<SkipListBaseNode *> tmp_vec;
     while (head) {
@@ -798,8 +761,6 @@ class SkipList {
       }
       tmp_vec.clear();
     }
-    // LOG_INFO("footprint: %lu", this->GetMemoryFootprint());
-    node_manager_.PrintFootprint();
     return;
   }
   void VerifyList() {
@@ -807,19 +768,21 @@ class SkipList {
       // verify list is more useful in single thread case
       return;
     }
-    LOG_INFO("verifying!!!");
     auto head = this->skip_list_head_.load();
 
     size_t inner_node_count = 0;
     while (head) {
-      LOG_INFO("verifying head: %p", head);
+      LOG_TRACE("verifying head: %p", head);
       auto cursor = reinterpret_cast<SkipListInnerNode *>(head->next_.load());
       while (cursor) {
         ++inner_node_count;
-        LOG_INFO("verifying %p", cursor);
-        auto next_cursor = reinterpret_cast<SkipListInnerNode *>(GET_NEXT(cursor));
-        auto down_cursor = reinterpret_cast<SkipListInnerNode *>(cursor->down_.load());
-        // verity flag bit and marker bit, should not see any delete node and flag node
+        LOG_TRACE("verifying %p", cursor);
+        auto next_cursor =
+            reinterpret_cast<SkipListInnerNode *>(GET_NEXT(cursor));
+        auto down_cursor =
+            reinterpret_cast<SkipListInnerNode *>(cursor->down_.load());
+        // verity flag bit and marker bit, should not see any delete node and
+        // flag node
         PL_ASSERT(next_cursor != cursor);
         PL_ASSERT(!CHECK_FLAG(cursor));
         PL_ASSERT(!CHECK_DELETE(cursor));
@@ -929,7 +892,7 @@ class SkipList {
    * skip list
    *
    */
-  // TODO: modify the context
+  // modify the context
   class ForwardIterator {
    private:
     SkipListInnerNode *node_;
@@ -958,8 +921,6 @@ class SkipList {
       }
 
       kv_p = std::make_pair(&(node_->key_), &(node_->GetValue()));
-
-      // list_->epoch_manager_.LeaveEpoch(epoch_node_p);
     }
 
     /*
@@ -979,8 +940,6 @@ class SkipList {
       } else {
         node_ = nullptr;
       }
-
-      // list_->epoch_manager_.LeaveEpoch(epoch_node_p);
     }
     ~ForwardIterator() {}
 
@@ -1004,10 +963,7 @@ class SkipList {
         return *this;
       }
 
-      // auto epoch_node_p = list_->epoch_manager_.JoinEpoch();
-      // OperationContext ctx{epoch_node_p};
-
-      // TODO: Add logic for handling delete node
+      // logic for handling delete node
       node_ = reinterpret_cast<SkipListInnerNode *>(GET_NEXT(node_));
       if (node_) {
         if (CHECK_DELETE(node_)) {
@@ -1016,8 +972,6 @@ class SkipList {
         kv_p.first = &(node_->key_);
         kv_p.second = &(node_->GetValue());
       }
-
-      // list_->epoch_manager_.LeaveEpoch(epoch_node_p);
 
       return *this;
     }
@@ -1031,10 +985,7 @@ class SkipList {
       // This will increase ref count temporarily, but it is always consistent
       ForwardIterator temp = *this;
 
-      // auto epoch_node_p = list_->epoch_manager_.JoinEpoch();
-      // OperationContext ctx{epoch_node_p};
-
-      // TODO: Add logic for handling delete node
+      // logic for handling delete node
       node_ = reinterpret_cast<SkipListInnerNode *>(GET_NEXT(node_));
       if (node_) {
         if (CHECK_DELETE(node_)) {
@@ -1044,11 +995,8 @@ class SkipList {
         kv_p.second = &(node_->GetValue());
       }
 
-      // list_->epoch_manager_.LeaveEpoch(epoch_node_p);
-
       return temp;
     }
-    // TODO: more operation need to be override
   };
 
   /*
@@ -1073,7 +1021,6 @@ class SkipList {
      * the SkipList
      */
     ReversedIterator(SkipList *list) : list_(list), ctx_(nullptr) {
-      // LOG_INFO("RI constructed");
       this->IterJoinEpoch();
 
       SkipListBaseNode *cursor = this->list_->skip_list_head_.load();
@@ -1098,8 +1045,6 @@ class SkipList {
      */
     ReversedIterator(SkipList *list, KeyType &key)
         : list_(list), ctx_(nullptr) {
-      // LOG_INFO("RI constructed with %s", key.GetInfo().c_str());
-
       this->IterJoinEpoch();
 
       auto pair = this->list_->Search(key, ctx_);
@@ -1208,7 +1153,6 @@ class SkipList {
       UNUSED_ATTRIBUTE const ValueType &value,
       UNUSED_ATTRIBUTE std::function<bool(const void *)> predicate,
       UNUSED_ATTRIBUTE bool *predicate_satisfied) {
-    // LOG_INFO("ConditionalInsert Called");
     auto *epoch_node_p = epoch_manager_.JoinEpoch();
     OperationContext ctx{epoch_node_p};
     bool ret = InsertNode(key, value, ctx, predicate, predicate_satisfied);
@@ -1223,7 +1167,6 @@ class SkipList {
    * exist. Return true if delete succeeds
    */
   bool Delete(const KeyType &key, const ValueType &value) {
-    // LOG_INFO("Delete called!");
     auto *epoch_node_p = epoch_manager_.JoinEpoch();
     OperationContext ctx{epoch_node_p};
     bool ret = Delete(key, value, ctx);
@@ -1241,7 +1184,6 @@ class SkipList {
    * is empty or not
    */
   bool GetValue(const KeyType &search_key, std::vector<ValueType> &value_list) {
-    // LOG_INFO("GetValue()");
     auto *epoch_node_p = epoch_manager_.JoinEpoch();
     OperationContext ctx{epoch_node_p};
     bool ret = Get(search_key, value_list, ctx);
@@ -1261,7 +1203,6 @@ class SkipList {
   bool GetValueLimit(const KeyType &search_key,
                      std::vector<ValueType> &value_list, uint64_t limit,
                      uint64_t offset) {
-    LOG_INFO("GetValue()");
     auto *epoch_node_p = epoch_manager_.JoinEpoch();
     OperationContext ctx{epoch_node_p};
     bool ret = GetLimit(search_key, value_list, limit, offset, ctx);
@@ -1287,7 +1228,6 @@ class SkipList {
    *                              force a garbage collection
    */
   void PerformGC() {
-    // LOG_INFO("Perform garbage collection!");
     this->epoch_manager_.PerformGarbageCollection();
     this->epoch_manager_.need_gc = false;
   }
@@ -1295,15 +1235,9 @@ class SkipList {
   /*
    * NeedGC() - Whether the skiplsit needs garbage collection
    */
-  bool NeedGC() {
-    // LOG_INFO("Need GC!");
-    return this->epoch_manager_.need_gc;
-  }
+  bool NeedGC() { return this->epoch_manager_.need_gc; }
 
-  size_t GetMemoryFootprint() {
-    // LOG_INFO("Get Memory Footprint!");
-    return node_manager_.GetFootprint();
-  }
+  size_t GetMemoryFootprint() { return node_manager_.GetFootprint(); }
 
  public:
   // Key comparator
@@ -1444,8 +1378,6 @@ class SkipList {
 
     ~EpochManager() {
       if (DISABLE_CLEAR_EPOCH) return;
-      // LOG_INFO("footprint before deconstruct epoch:");
-      this->node_manager_epoch_->PrintFootprint();
       destruct_flag.store(true);
 
       if (epoch_thread_p != nullptr) {
@@ -1469,7 +1401,6 @@ class SkipList {
 
       PL_ASSERT(head_epoch_p == nullptr);
       // LOG_INFO("footprint after deconstruct epoch:");
-      this->node_manager_epoch_->PrintFootprint();
       return;
     }
 
@@ -1495,7 +1426,6 @@ class SkipList {
       int cur_counter = node_manager_epoch_->GetGarbageNodeCount();
       if (cur_counter > gc_threshold) {
         need_gc = true;
-        // LOG_INFO("Need gc set to true!!!!");
       }
       return;
     }
@@ -1504,7 +1434,6 @@ class SkipList {
      * return the current EpochNode
      * need to add the reference count of current EpochNode
      */
-
     EpochNode *JoinEpoch() {
     try_join_again:
       EpochNode *epoch_p = current_epoch_p;
@@ -1520,7 +1449,6 @@ class SkipList {
      * leaves current EpochNode
      * should maintain atomicity when counting the reference
      */
-
     void LeaveEpoch(EpochNode *node) {
       node->active_txn_count.fetch_sub(1);
       return;
@@ -1555,14 +1483,12 @@ class SkipList {
      * NOTE: There is no race condition in this function since it is
      * only called by the cleaner thread
      */
-
     void ClearEpoch() {
       if (DISABLE_CLEAR_EPOCH) return;
-      // LOG_INFO("Start to clear epoch");
 
       while (1) {
         if (head_epoch_p == current_epoch_p) {
-          // LOG_TRACE("Current epoch is head epoch. Do not clean");
+          LOG_TRACE("Current epoch is head epoch. Do not clean");
           break;
         }
 
@@ -1570,14 +1496,14 @@ class SkipList {
         PL_ASSERT(active_txn_count >= 0);
 
         if (active_txn_count != 0) {
-          // LOG_TRACE("Head epoch is not empty. Return");
+          LOG_TRACE("Head epoch is not empty. Return");
           break;
         }
 
         if (head_epoch_p->active_txn_count.fetch_sub(MAX_THREAD_COUNT) > 0) {
-          // LOG_TRACE(
-          //    "Some thread sneaks in after we have decided"
-          //    " to clean. Return");
+          LOG_TRACE(
+              "Some thread sneaks in after we have decided"
+              " to clean. Return");
 
           head_epoch_p->active_txn_count.fetch_add(MAX_THREAD_COUNT);
 
@@ -1590,8 +1516,6 @@ class SkipList {
              garbage_node_p != nullptr; garbage_node_p = next_garbage_node_p) {
           next_garbage_node_p = garbage_node_p->next_p;
 
-          // LOG_INFO("Delete garbage node, key:%s",
-          // garbage_node_p->node_p->key_.GetInfo().c_str());
           node_manager_epoch_->ReturnSkipListNode(garbage_node_p->node_p);
           node_manager_epoch_->ReturnGarbageNode(garbage_node_p);
         }  // for
@@ -1605,12 +1529,7 @@ class SkipList {
     }
 
     void PerformGarbageCollection() {
-      // LOG_INFO("Call Perform Garbage Collection!!!!!!");
-      // LOG_INFO("footprint before gc: %lu",
-      //         this->node_manager_epoch_->GetFootprint());
       ClearEpoch();
-      // LOG_INFO("footprint after gc: %lu",
-      //         this->node_manager_epoch_->GetFootprint());
       need_gc = false;
       return;
     }
@@ -1621,16 +1540,12 @@ class SkipList {
     void EpochThreadFunc() {
       while (!destruct_flag.load()) {
         NewEpoch();
-        // if(need_gc) PerformGarbageCollection();
-        // else LOG_INFO("Don't need gc, Garbage node count:%lu\n",
-        // node_manager_epoch_->GetGarbageNodeCount());
-
         // Sleep for 50 ms
         std::chrono::microseconds duration(GC_Interval_);
         std::this_thread::sleep_for(duration);
       }
 
-      // LOG_TRACE("Epoch manager exits; thread return");
+      LOG_TRACE("Epoch manager exits; thread return");
 
       return;
     }
@@ -1660,11 +1575,6 @@ class SkipList {
           head_node_count_(0),
           epoch_node_count_(0),
           garbage_node_count_(0) {}
-    void PrintFootprint() {
-      // LOG_INFO("FootPrint: inner: %lu head %lu epoch: %lu gn: %lu",
-      //         inner_node_count_.load(), head_node_count_.load(),
-      //         epoch_node_count_.load(), garbage_node_count_.load());
-    }
     size_t GetFootprint() {
       return sizeof(SkipListBaseNode) * head_node_count_.load() +
              sizeof(SkipListInnerNode) * inner_node_count_.load() +

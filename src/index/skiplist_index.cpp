@@ -48,9 +48,6 @@ bool SKIPLIST_INDEX_TYPE::InsertEntry(const storage::Tuple *key,
   index_key.SetFromKey(key);
   bool ret = container.Insert(index_key, value);
 
-  // LOG_INFO("InsertEntry(key=%s, val=%s) [%s]", index_key.GetInfo().c_str(),
-  //         IndexUtil::GetInfo(value).c_str(), (ret ? "SUCCESS" : "FAIL"));
-
   return ret;
 }
 
@@ -69,8 +66,6 @@ bool SKIPLIST_INDEX_TYPE::DeleteEntry(const storage::Tuple *key,
   // it is unnecessary for us to allocate memory
   bool ret = container.Delete(index_key, value);
 
-  // LOG_INFO("DeleteEntry(key=%s, val=%s) [%s]", index_key.GetInfo().c_str(),
-  //         IndexUtil::GetInfo(value).c_str(), (ret ? "SUCCESS" : "FAIL"));
   container.VerifyList();
   return ret;
 }
@@ -108,9 +103,6 @@ void SKIPLIST_INDEX_TYPE::Scan(
     throw Exception("Invalid scan direction \n");
   }
 
-  // LOG_INFO("Scan() Point Query = %d; Full Scan = %d ", csp_p->IsPointQuery(),
-  //          csp_p->IsFullIndexScan());
-
   if (csp_p->IsPointQuery()) {
     const storage::Tuple *point_query_key_p = csp_p->GetPointQueryKey();
 
@@ -127,9 +119,6 @@ void SKIPLIST_INDEX_TYPE::Scan(
   } else {
     const storage::Tuple *low_key_p = csp_p->GetLowKey();
     const storage::Tuple *high_key_p = csp_p->GetHighKey();
-
-    // LOG_INFO("Partial scan low key: %s\n high key: %s",
-    //         low_key_p->GetInfo().c_str(), high_key_p->GetInfo().c_str());
 
     KeyType index_low_key;
     KeyType index_high_key;
@@ -172,7 +161,7 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
     throw Exception("Invalid scan direction \n");
   }
 
-  LOG_INFO(
+  LOG_TRACE(
       "ScanLimit() Point Query = %d; Full Scan = %d; limit = %lu; offset = %lu",
       csp_p->IsPointQuery(), csp_p->IsFullIndexScan(), limit, offset);
 
@@ -206,8 +195,8 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
     const storage::Tuple *low_key_p = csp_p->GetLowKey();
     const storage::Tuple *high_key_p = csp_p->GetHighKey();
 
-    LOG_INFO("Partial scanLimit low key: %s\n high key: %s",
-             low_key_p->GetInfo().c_str(), high_key_p->GetInfo().c_str());
+    LOG_TRACE("Partial scanLimit low key: %s\n high key: %s",
+              low_key_p->GetInfo().c_str(), high_key_p->GetInfo().c_str());
 
     KeyType index_low_key;
     KeyType index_high_key;
@@ -241,7 +230,6 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
 
 SKIPLIST_TEMPLATE_ARGUMENTS
 void SKIPLIST_INDEX_TYPE::ScanAllKeys(std::vector<ValueType> &result) {
-  LOG_TRACE("ScannAllKeys()");
   auto it = container.ForwardBegin();
 
   // scan all entries
@@ -257,8 +245,6 @@ void SKIPLIST_INDEX_TYPE::ScanKey(const storage::Tuple *key,
                                   std::vector<ValueType> &result) {
   KeyType index_key;
   index_key.SetFromKey(key);
-
-  // LOG_INFO("ScanKey() key: %s", index_key.GetInfo().c_str());
 
   container.GetValue(index_key, result);
 }
