@@ -746,6 +746,21 @@ void TestingIndexUtil::NonUniqueKeyMultiThreadedStressTest2(
   location_ptrs.clear();
 }
 
+void TestingIndexUtil::RandomPatternTest(const IndexType index_type){
+  auto pool = TestingHarness::GetInstance().GetTestingPool();
+  
+  // INDEX
+  std::unique_ptr<index::Index, void (*)(index::Index *)> index(
+      TestingIndexUtil::BuildIndex(index_type, false), DestroyIndex);
+
+  // Parallel Test
+  size_t num_threads = 20;
+  size_t scale_factor = 300;
+
+  LaunchParallelTest(num_threads, TestingIndexUtil::RandomHelper, index.get(),
+                     pool, scale_factor);
+}
+
 std::unique_ptr<index::IndexMetadata> TestingIndexUtil::BuildTestIndexMetadata(
     const IndexType index_type, const bool unique_keys) {
   LOG_DEBUG("Build index type: %s [unique_keys=%s]",
@@ -931,6 +946,103 @@ void TestingIndexUtil::DeleteHelper(index::Index *index,
     // key2 item 1
     // no key3
     // no key4
+  }
+}
+
+// RANDOM PATTERN FUNCTION
+void TestingIndexUtil::RandomHelper(index::Index *index,
+                                    type::AbstractPool *pool,
+                                    size_t scale_factor,
+                                    UNUSED_ATTRIBUTE uint64_t thread_itr) {
+  const catalog::Schema *key_schema = index->GetKeySchema();
+  std::vector<ItemPointer *> location_ptrs;
+
+  std::vector<std::shared_ptr<storage::Tuple>> keys;
+  const size_t key_count = scale_factor * 5;
+  // random number generator
+  std::default_random_engine eng((std::random_device())());
+  std::uniform_int_distribution<size_t> idis(0, key_count);
+
+  // Generate scale_factor*6 number of keys
+  for (size_t key_itr = 0; key_itr < key_count; ++key_itr) {
+    std::shared_ptr<storage::Tuple> key0(new storage::Tuple(key_schema, true));
+    std::shared_ptr<storage::Tuple> key1(new storage::Tuple(key_schema, true));
+    std::shared_ptr<storage::Tuple> key2(new storage::Tuple(key_schema, true));
+    std::shared_ptr<storage::Tuple> key3(new storage::Tuple(key_schema, true));
+    std::shared_ptr<storage::Tuple> key4(new storage::Tuple(key_schema, true));
+    std::shared_ptr<storage::Tuple> keynonce(
+        new storage::Tuple(key_schema, true));
+
+    key0->SetValue(0, type::ValueFactory::GetIntegerValue(100 * key_itr),
+                   pool);
+    key0->SetValue(1, type::ValueFactory::GetVarcharValue("a"), pool);
+    key1->SetValue(0, type::ValueFactory::GetIntegerValue(100 * key_itr),
+                   pool);
+    key1->SetValue(1, type::ValueFactory::GetVarcharValue("b"), pool);
+    key2->SetValue(0, type::ValueFactory::GetIntegerValue(100 * key_itr),
+                   pool);
+    key2->SetValue(1, type::ValueFactory::GetVarcharValue("c"), pool);
+    key3->SetValue(0, type::ValueFactory::GetIntegerValue(400 * key_itr),
+                   pool);
+    key3->SetValue(1, type::ValueFactory::GetVarcharValue("d"), pool);
+    key4->SetValue(0, type::ValueFactory::GetIntegerValue(500 * key_itr),
+                   pool);
+    key4->SetValue(
+        1, type::ValueFactory::GetVarcharValue(StringUtil::Repeat("e", 1000)),
+        pool);
+    keynonce->SetValue(0, type::ValueFactory::GetIntegerValue(1000 * key_itr),
+                       pool);
+    keynonce->SetValue(1, type::ValueFactory::GetVarcharValue("f"), pool);
+
+
+    keys.push_back(key0);
+    keys.push_back(key1);
+    keys.push_back(key2);
+    keys.push_back(key3);
+    keys.push_back(key4);
+    keys.push_back(keynonce);
+  }
+
+  std::vector<std::shared_ptr<ItemPointer>> items;
+  items.push_back(item0);
+  items.push_back(item1);
+  items.push_back(item2);
+
+  // First insert scale_factor * 3 keys
+  for (size_t key_itr = 0; key_itr < scale_factor * 3; ++key_itr) {
+    index->InsertEntry(keys[key_itr].get(), items[key_itr % 3].get());
+  }
+
+  // start random operation
+  for (size_t op_itr = 0; op_itr < scale_factor; ++op_itr) {
+    size_t key_idx = idis(eng);
+    if (op_itr % 4 == 0) {
+      // insert
+      index->InsertEntry(keys[key_idx].get(), items[key_idx % 3].get());
+    } else if (op_itr % 4 == 1) {
+      // delete
+      index->DeleteEntry(keys[key_idx].get(), items[key_idx % 3].get());
+    } else if (op_itr % 4 == 2) {
+      // scan all keys
+      index->ScanAllKeys(location_ptrs);
+      location_ptrs.clear();
+    } else {
+      type::Value key_val0 = keys[key_idx]->GetValue(0);
+      type::Value key_val1 = keys[key_idx]->GetValue(1);
+      // scan test
+      if (key_idx % 2 == 0) {
+        index->ScanTest({key_val0, key_val1}, {0, 1}, 
+                      {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                       ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+                      ScanDirectionType::FORWARD, location_ptrs);
+      } else {
+        index->ScanTest({key_val0, key_val1}, {0, 1}, 
+                      {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+                       ExpressionType::COMPARE_GREATERTHANOREQUALTO},
+                      ScanDirectionType::BACKWARD, location_ptrs);
+      }
+      location_ptrs.clear();
+    }
   }
 }
 

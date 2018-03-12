@@ -52,6 +52,8 @@ class TestingIndexUtil {
 
   static void MyReversedIteratorTest(IndexType index_type);
 
+  static void RandomPatternTest(IndexType index_type);
+
   //===--------------------------------------------------------------------===//
   // Utility Methods
   //===--------------------------------------------------------------------===//
@@ -70,6 +72,11 @@ class TestingIndexUtil {
 
   // Delete helper function
   static void DeleteHelper(index::Index *index, type::AbstractPool *pool,
+                           size_t scale_factor, uint64_t thread_itr);
+
+  // Random helper function
+  // Delete helper function
+  static void RandomHelper(index::Index *index, type::AbstractPool *pool,
                            size_t scale_factor, uint64_t thread_itr);
 
   static std::shared_ptr<ItemPointer> item0;
