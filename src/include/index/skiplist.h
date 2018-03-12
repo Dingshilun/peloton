@@ -804,24 +804,37 @@ class SkipList {
   }
   void VerifyList() {
     if (DISABLE_VERIFY) {
+      // verify list is more useful in single thread case
       return;
     }
     LOG_INFO("verifying!!!");
     auto head = this->skip_list_head_.load();
 
+    size_t inner_node_count = 0;
     while (head) {
       LOG_INFO("verifying head: %p", head);
       auto cursor = reinterpret_cast<SkipListInnerNode *>(head->next_.load());
       while (cursor) {
+        ++inner_node_count;
         LOG_INFO("verifying %p", cursor);
-        PL_ASSERT(GET_NEXT(cursor) != cursor);
-        PL_ASSERT(CHECK_DELETE(cursor) != true);
+        auto next_cursor = reinterpret_cast<SkipListInnerNode *>(GET_NEXT(cursor));
+        auto down_cursor = reinterpret_cast<SkipListInnerNode *>(cursor->down_.load());
+        // verity flag bit and marker bit, should not see any delete node and flag node
+        PL_ASSERT(next_cursor != cursor);
         PL_ASSERT(!CHECK_FLAG(cursor));
         PL_ASSERT(!CHECK_DELETE(cursor));
-        cursor = reinterpret_cast<SkipListInnerNode *>(GET_NEXT(cursor));
+        if (next_cursor != nullptr) {
+          PL_ASSERT(KeyCmpLessEqual(cursor->key_, next_cursor->key_));
+        }
+        if (down_cursor != nullptr) {
+          PL_ASSERT(KeyCmpEqual(cursor->key_, down_cursor->key_));
+        }
+        cursor = next_cursor;
       }
       head = head->down_.load();
     }
+    size_t count_actual = this->node_manager_.GetInnderNodeCount();
+    PL_ASSERT(inner_node_count == count_actual);
   }
   /*
    * struct shouldn't exceed 64 bytes -- cache line
@@ -1659,6 +1672,7 @@ class SkipList {
              sizeof(GarbageNode) * garbage_node_count_.load();
     }
     size_t GetGarbageNodeCount() { return garbage_node_count_.load(); }
+    size_t GetInnderNodeCount() { return inner_node_count_.load(); }
     /*
      *
      */
