@@ -68,7 +68,6 @@ void TestingIndexUtil::MyReversedIteratorTest(const IndexType index_type) {
     itemVec.push_back(item);
     index->InsertEntry(key0.get(), itemVec[i].get());
   }
-
   // SCAN
   index->ScanTest({key0_val0, key0_val1}, {0, 1},
                   {ExpressionType::COMPARE_GREATERTHANOREQUALTO,
@@ -706,7 +705,7 @@ void TestingIndexUtil::NonUniqueKeyMultiThreadedStressTest2(
   const catalog::Schema *key_schema = index->GetKeySchema();
 
   // Parallel Test
-  size_t num_threads = 15;
+  size_t num_threads = 12;
   size_t scale_factor = 3;
   LaunchParallelTest(num_threads, TestingIndexUtil::InsertHelper, index.get(),
                      pool, scale_factor);

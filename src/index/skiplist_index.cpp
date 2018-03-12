@@ -74,6 +74,7 @@ bool SKIPLIST_INDEX_TYPE::DeleteEntry(const storage::Tuple *key,
 
   LOG_INFO("DeleteEntry(key=%s, val=%s) [%s]", index_key.GetInfo().c_str(),
            IndexUtil::GetInfo(value).c_str(), (ret ? "SUCCESS" : "FAIL"));
+  container.VerifyList();
   return ret;
 }
 
@@ -122,10 +123,12 @@ void SKIPLIST_INDEX_TYPE::Scan(
 
     container.GetValue(point_query_key, result);
   } else if (csp_p->IsFullIndexScan()) {
-    for (auto scan_itr = container.ForwardBegin(); !scan_itr.IsEnd();
+    auto scan_itr = container.ForwardBegin();
+    for (; !scan_itr.IsEnd();
          scan_itr++) {
       result.push_back(*(scan_itr->second));
     }
+    scan_itr.IterLeaveEpoch();
   } else {
     const storage::Tuple *low_key_p = csp_p->GetLowKey();
     const storage::Tuple *high_key_p = csp_p->GetHighKey();
@@ -138,18 +141,22 @@ void SKIPLIST_INDEX_TYPE::Scan(
     index_low_key.SetFromKey(low_key_p);
     index_high_key.SetFromKey(high_key_p);
     if (scan_direction == ScanDirectionType::FORWARD) {
-      for (auto scan_itr = container.ForwardBegin(index_low_key);
+      auto scan_itr = container.ForwardBegin(index_low_key);
+      for (;
            (scan_itr.IsEnd() == false) &&
                (container.KeyCmpLessEqual(*(scan_itr->first), index_high_key));
            scan_itr++) {
         result.push_back(*(scan_itr->second));
       }
+      scan_itr.IterLeaveEpoch();
     } else {
       //scanning backwards
-      for (auto scan_itr = container.ReverseBegin(index_high_key); (!scan_itr.IsEnd()) && container
+      auto scan_itr = container.ReverseBegin(index_high_key);
+      for ( ;(!scan_itr.IsEnd()) && container
           .KeyCmpGreaterEqual(*(scan_itr->first), index_low_key); scan_itr++){
         result.push_back(*(scan_itr->second));
       }
+      scan_itr.IterLeaveEpoch();
     }
   }
 }
@@ -181,6 +188,7 @@ void SKIPLIST_INDEX_TYPE::ScanAllKeys(std::vector<ValueType> &result) {
     result.push_back(*(it->second));
     it++;
   }
+  it.IterLeaveEpoch();
 }
 
 SKIPLIST_TEMPLATE_ARGUMENTS
