@@ -46,13 +46,10 @@ bool SKIPLIST_INDEX_TYPE::InsertEntry(const storage::Tuple *key,
                                       ItemPointer *value) {
   KeyType index_key;
   index_key.SetFromKey(key);
-  //LOG_INFO("InsertEntrybefore(%s)",key->GetValue(0).GetInfo().c_str());
-  //LOG_INFO("InsertEntrybefore(%s)",key->GetValue(1).GetInfo().c_str());
-  //LOG_INFO("InsertEntrybefore(%s)",IndexUtil::GetInfo(value).c_str());
   bool ret = container.Insert(index_key, value);
 
-  LOG_INFO("InsertEntry(key=%s, val=%s) [%s]", index_key.GetInfo().c_str(),
-          IndexUtil::GetInfo(value).c_str(), (ret ? "SUCCESS" : "FAIL"));
+  // LOG_INFO("InsertEntry(key=%s, val=%s) [%s]", index_key.GetInfo().c_str(),
+  //         IndexUtil::GetInfo(value).c_str(), (ret ? "SUCCESS" : "FAIL"));
 
   return ret;
 }
@@ -72,8 +69,8 @@ bool SKIPLIST_INDEX_TYPE::DeleteEntry(const storage::Tuple *key,
   // it is unnecessary for us to allocate memory
   bool ret = container.Delete(index_key, value);
 
-  LOG_INFO("DeleteEntry(key=%s, val=%s) [%s]", index_key.GetInfo().c_str(),
-           IndexUtil::GetInfo(value).c_str(), (ret ? "SUCCESS" : "FAIL"));
+  // LOG_INFO("DeleteEntry(key=%s, val=%s) [%s]", index_key.GetInfo().c_str(),
+  //         IndexUtil::GetInfo(value).c_str(), (ret ? "SUCCESS" : "FAIL"));
   container.VerifyList();
   return ret;
 }
@@ -112,8 +109,8 @@ void SKIPLIST_INDEX_TYPE::Scan(
     throw Exception("Invalid scan direction \n");
   }
 
-  LOG_INFO("Scan() Point Query = %d; Full Scan = %d ", csp_p->IsPointQuery(),
-           csp_p->IsFullIndexScan());
+  // LOG_INFO("Scan() Point Query = %d; Full Scan = %d ", csp_p->IsPointQuery(),
+  //          csp_p->IsFullIndexScan());
 
   if (csp_p->IsPointQuery()) {
     const storage::Tuple *point_query_key_p = csp_p->GetPointQueryKey();
@@ -124,8 +121,7 @@ void SKIPLIST_INDEX_TYPE::Scan(
     container.GetValue(point_query_key, result);
   } else if (csp_p->IsFullIndexScan()) {
     auto scan_itr = container.ForwardBegin();
-    for (; !scan_itr.IsEnd();
-         scan_itr++) {
+    for (; !scan_itr.IsEnd(); scan_itr++) {
       result.push_back(*(scan_itr->second));
     }
     scan_itr.IterLeaveEpoch();
@@ -133,8 +129,8 @@ void SKIPLIST_INDEX_TYPE::Scan(
     const storage::Tuple *low_key_p = csp_p->GetLowKey();
     const storage::Tuple *high_key_p = csp_p->GetHighKey();
 
-    LOG_INFO("Partial scan low key: %s\n high key: %s",
-             low_key_p->GetInfo().c_str(), high_key_p->GetInfo().c_str());
+    // LOG_INFO("Partial scan low key: %s\n high key: %s",
+    //         low_key_p->GetInfo().c_str(), high_key_p->GetInfo().c_str());
 
     KeyType index_low_key;
     KeyType index_high_key;
@@ -150,10 +146,11 @@ void SKIPLIST_INDEX_TYPE::Scan(
       }
       scan_itr.IterLeaveEpoch();
     } else {
-      //scanning backwards
       auto scan_itr = container.ReverseBegin(index_high_key);
-      for ( ;(!scan_itr.IsEnd()) && container
-          .KeyCmpGreaterEqual(*(scan_itr->first), index_low_key); scan_itr++){
+      for (;
+           (!scan_itr.IsEnd()) &&
+               container.KeyCmpGreaterEqual(*(scan_itr->first), index_low_key);
+           scan_itr++) {
         result.push_back(*(scan_itr->second));
       }
       scan_itr.IterLeaveEpoch();
@@ -197,7 +194,7 @@ void SKIPLIST_INDEX_TYPE::ScanKey(const storage::Tuple *key,
   KeyType index_key;
   index_key.SetFromKey(key);
 
-  LOG_INFO("ScanKey() key: %s", index_key.GetInfo().c_str());
+  // LOG_INFO("ScanKey() key: %s", index_key.GetInfo().c_str());
 
   container.GetValue(index_key, result);
 }

@@ -705,8 +705,8 @@ void TestingIndexUtil::NonUniqueKeyMultiThreadedStressTest2(
   const catalog::Schema *key_schema = index->GetKeySchema();
 
   // Parallel Test
-  size_t num_threads = 12;
-  size_t scale_factor = 3;
+  size_t num_threads = 200;
+  size_t scale_factor = 3000;
   LaunchParallelTest(num_threads, TestingIndexUtil::InsertHelper, index.get(),
                      pool, scale_factor);
   LaunchParallelTest(num_threads, TestingIndexUtil::DeleteHelper, index.get(),
