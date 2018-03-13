@@ -796,8 +796,7 @@ class SkipList {
       }
       head = head->down_.load();
     }
-    size_t count_actual = this->node_manager_.GetInnderNodeCount();
-    PL_ASSERT(inner_node_count == count_actual);
+    PL_ASSERT(inner_node_count == this->node_manager_.GetInnerNodeCount());
   }
   /*
    * struct shouldn't exceed 64 bytes -- cache line
